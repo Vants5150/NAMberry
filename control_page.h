@@ -150,8 +150,12 @@ body.nobm .bk:not(.io) .mt{display:none}
 svg.nsv{position:absolute;left:0;top:0;pointer-events:none;overflow:visible;z-index:3}
 svg.nsv .nlab{pointer-events:auto;cursor:pointer}
 body.lkdrag svg.nsv .nlab{pointer-events:none}
-.trashpop{position:fixed;z-index:70;width:44px;height:44px;border-radius:50%;border:2px solid #fff;background:#d33;color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,.5);cursor:pointer;padding:0;animation:trin .15s ease-out}
-.trashpop svg{width:24px;height:24px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+.blkpop{position:fixed;z-index:70;display:flex;gap:12px;animation:trin .15s ease-out}
+.blkpop button{width:44px;height:44px;border-radius:50%;border:2px solid #fff;background:#d33;color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,.5);cursor:pointer;padding:0}
+.blkpop button.cp{background:#2a6fdb}
+.blkpop button.ps{background:#198754}
+.blkpop svg{width:24px;height:24px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+.toastmini{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:80;background:#222;color:#fff;border-radius:10px;padding:10px 16px;font-size:13px;box-shadow:0 6px 20px rgba(0,0,0,.5);max-width:90vw}
 @keyframes trin{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
 .lpop{position:fixed;z-index:60;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:10px;box-shadow:0 8px 28px rgba(0,0,0,.4);display:flex;flex-direction:column;gap:8px;min-width:270px}
 .lpop .lh{font-weight:700;font-size:13px}
@@ -1267,19 +1271,53 @@ function iotile(pid){
   netDnd(t,{id:pid});
   return t;
 }
-/* long press on a block: a trash button appears over it; tapping it removes the block (any other tap, or 5 s, dismisses it)*/
-let trashEl=null,trashTm=0;
+/* long press on a block: a trash button (remove) and a copy button appear over it; a long press on an empty cell shows a paste button.
+   Any other tap, or 5 s, dismisses them. The copied block keeps its type, settings, model file and on/off state; it is pasted as a new block with no links.*/
+let trashEl=null,trashTm=0,blkClip=null;
+const IC_TRASH='<svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 10v6M14 10v6"/></svg>';
+const IC_COPY='<svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2"/></svg>';
+const IC_PASTE='<svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="16" rx="2"/><path d="M9 5V4a1 1 0 011-1h4a1 1 0 011 1v1M9 12h6M9 16h6"/></svg>';
 function hideTrash(){if(trashTm){clearTimeout(trashTm);trashTm=0}if(trashEl){trashEl.remove();trashEl=null}}
-function showTrash(tile,id){
+function flash(msg){const o=document.querySelector(".toastmini");if(o)o.remove();const d=document.createElement("div");d.className="toastmini";d.textContent=msg;document.body.appendChild(d);setTimeout(()=>d.remove(),3500)}
+function popBtn(cls,title,svg,fn){const b=document.createElement("button");b.className=cls;b.title=title;b.innerHTML=svg;b.onclick=async ev=>{ev.stopPropagation();hideTrash();await fn()};return b}
+function popAt(el0,btns){
   hideTrash();
-  const r=tile.getBoundingClientRect();
-  const b=document.createElement("button");b.className="trashpop";b.title="Remove the block";
-  b.innerHTML='<svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 10v6M14 10v6"/></svg>';
-  b.style.left=Math.max(4,Math.min(window.innerWidth-48,r.left+r.width/2-22))+"px";
-  b.style.top=Math.max(4,r.top+r.height/2-22)+"px";
-  b.onclick=async ev=>{ev.stopPropagation();hideTrash();sel=null;warn(await g({op:"del",id}))};
-  document.body.appendChild(b);trashEl=b;
+  const r=el0.getBoundingClientRect(),w=document.createElement("div");w.className="blkpop";
+  btns.forEach(b=>w.appendChild(b));
+  const wd=btns.length*44+(btns.length-1)*12;
+  w.style.left=Math.max(4,Math.min(window.innerWidth-wd-4,r.left+r.width/2-wd/2))+"px";
+  w.style.top=Math.max(4,r.top+r.height/2-22)+"px";
+  document.body.appendChild(w);trashEl=w;
   trashTm=setTimeout(hideTrash,5000);
+}
+const clipKey=n=>n.t=="fx"?n.fx:(n.t=="vol"&&n.rt?"rout":n.t);
+function copyBlock(id){
+  const l=locate(id);if(!l||!l.n)return;
+  const n=l.n;
+  blkClip={k:clipKey(n),t:n.t,fx:n.fx,d:bpData(n)+(n.fx=="cabir"&&n.file?"|file="+n.file:""),on:n.on?1:0,name:lbl(n)||n.fx||n.t};
+  flash("Copied: "+blkClip.name+". Long-press an empty cell, or use + > Paste, to paste it.");
+}
+async function pasteBlock(args){
+  if(!blkClip)return;
+  const c=blkClip;
+  const r=await g({op:"add",k:c.k,...args});warn(r);
+  if(!r.ok)return;
+  sel=r.id;
+  const s={t:c.t,fx:c.fx,p:[],on:c.on};
+  c.d.split("|").slice(1).forEach(x=>{const i=x.indexOf("="),k=x.slice(0,i),v=x.slice(i+1);if(k=="file")s.file=v;else s.p.push([k,parseFloat(v)])});
+  const q=await applyPairs(r.id,s);
+  if(!q.ok)alert(q.err||"error");else if(q.warn)alert(q.warn);
+  if(args.r!==undefined)await spliceLinks(r.id,args.r,args.p);
+}
+function showTrash(tile,id){
+  popAt(tile,[popBtn("cp","Copy the block",IC_COPY,()=>copyBlock(id)),popBtn("","Remove the block",IC_TRASH,async()=>{sel=null;warn(await g({op:"del",id}))})]);
+}
+function emptyCellPress(btnEl,args){
+  let tm=0,done=false;
+  const clr=()=>{if(tm){clearTimeout(tm);tm=0}};
+  btnEl.addEventListener("pointerdown",()=>{done=false;if(!blkClip)return;tm=setTimeout(()=>{done=true;popAt(btnEl,[popBtn("ps","Paste: "+blkClip.name,IC_PASTE,()=>pasteBlock(args))])},600)});
+  ["pointerup","pointerleave","pointercancel"].forEach(ev=>btnEl.addEventListener(ev,clr));
+  btnEl.addEventListener("click",ev=>{if(done){ev.stopImmediatePropagation();ev.preventDefault();done=false}},true);
 }
 document.addEventListener("pointerdown",e=>{if(trashEl&&!trashEl.contains(e.target))hideTrash()},true);
 function netDnd(tile,n){
@@ -1347,8 +1385,8 @@ async function spliceLinks(id,r,c){
 function netAddMenu(btnEl,args){
   btnEl.onclick=()=>{
     const s=el("select","pbs");
-    [["","Block..."]].concat(addOpts(3).filter(o=>o[0]!="__paste")).forEach(([v,t])=>{const o=el("option","",esc(t));o.value=v;s.appendChild(o)});
-    s.onchange=async()=>{const k=s.value;if(k){const r=await g({op:"add",k,...args});warn(r);if(r.ok){sel=r.id;if(args.r!==undefined)await spliceLinks(r.id,args.r,args.p)}}};
+    [["","Block..."]].concat(blkClip?[["__paste","Paste: "+blkClip.name]]:[],addOpts(3)).forEach(([v,t])=>{const o=el("option","",esc(t));o.value=v;s.appendChild(o)});
+    s.onchange=async()=>{const k=s.value;if(k=="__paste"){await pasteBlock(args);return}if(k){const r=await g({op:"add",k,...args});warn(r);if(r.ok){sel=r.id;if(args.r!==undefined)await spliceLinks(r.id,args.r,args.p)}}};
     s.onblur=()=>{if(s.parentNode)s.replaceWith(btnEl)};
     btnEl.replaceWith(s);s.focus();
   };
@@ -1364,7 +1402,7 @@ function gridView(mono){
       let io=null;for(const k in IOE)if(N.io[IOE[k].io][0]==r&&N.io[IOE[k].io][1]==c)io=+k;
       if(cc)cell.appendChild(ntile(cc.b[0],mono[cc.b[0].id]));
       else if(io!==null)cell.appendChild(iotile(io));
-      else{const p=el("button","gp","+");p.title="Add a block in this cell";netAddMenu(p,{r,p:c});cell.appendChild(p)}
+      else{const p=el("button","gp","+");p.title="Add a block in this cell (long press to paste a copied block)";netAddMenu(p,{r,p:c});emptyCellPress(p,{r,p:c});cell.appendChild(p)}
       gd.appendChild(cell);
     }
   }
@@ -2307,14 +2345,15 @@ function concertCard(){
   c.appendChild(bar);
   return c;
 }
-/* ---- DI recorder: raw input (24-bit stereo) kept in the board's memory, downloaded as a WAV file ----*/
-let diEl=null,diStat=null,diSecs=null,diTimer=null,diBusy=false;
+/* ---- DI recorder: raw input (24-bit stereo) kept in the board's memory (up to about 10 minutes), several takes can be added one after the other, downloaded as a WAV file ----*/
+let diEl=null,diStat=null,diSecs=null,diApp=null,diTimer=null,diBusy=false;
 async function diState(){try{return await (await fetch("/di?_="+Date.now(),{cache:"no-store"})).json()}catch(e){return null}}
+const diFmt=s=>{s=Math.round(s);return Math.floor(s/60)+":"+String(s%60).padStart(2,"0")};
 async function diRefresh(){
   const s=await diState();if(!s||!diStat)return s;
-  const sec=n=>(n/(s.rate||48000)).toFixed(1);
-  if(s.state==1)diStat.textContent="Recording: "+sec(s.frames)+" s of "+sec(s.target)+" s";
-  else if(s.state==2)diStat.textContent="Recorded "+sec(s.frames)+" s, ready to download";
+  const rate=s.rate||48000,sec=n=>diFmt(n/rate),nt=(s.marks||[]).length;
+  if(s.state==1)diStat.textContent="Recording take "+nt+": "+sec(s.frames)+" of "+sec(s.target)+" (the recording so far)";
+  else if(s.state==2)diStat.textContent="In memory: "+sec(s.frames)+" in "+nt+" take"+(nt==1?"":"s")+", "+sec(Math.max(0,(s.max||0)-s.frames))+" still free";
   else diStat.textContent="No recording in memory";
   if(s.state!=1&&diTimer){clearInterval(diTimer);diTimer=null}
   return s;
@@ -2323,7 +2362,7 @@ async function diDownload(){
   if(diBusy)return;diBusy=true;
   try{
     const s=await diState();if(!s||s.state!=2||!s.frames){alert("Nothing to download");return}
-    const n=s.frames,parts=[new Uint8Array(44)],CH=16000;
+    const n=s.frames,parts=[new Uint8Array(44)],CH=32000;
     for(let o=0;o<n;o+=CH){
       const c=Math.min(CH,n-o);
       diStat.textContent="Downloading... "+Math.round(100*o/n)+"%";
@@ -2335,10 +2374,14 @@ async function diDownload(){
     const h=new DataView(parts[0].buffer),w=(o,t)=>{for(let i=0;i<t.length;i++)h.setUint8(o+i,t.charCodeAt(i))};
     const dl=n*6;w(0,"RIFF");h.setUint32(4,36+dl,true);w(8,"WAVE");w(12,"fmt ");h.setUint32(16,16,true);h.setUint16(20,1,true);h.setUint16(22,2,true);
     h.setUint32(24,s.rate,true);h.setUint32(28,s.rate*6,true);h.setUint16(32,6,true);h.setUint16(34,24,true);w(36,"data");h.setUint32(40,dl,true);
-    const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(parts,{type:"audio/wav"}));
-    const d=new Date(),p2=x=>String(x).padStart(2,"0");
-    a.download="DI_"+d.getFullYear()+p2(d.getMonth()+1)+p2(d.getDate())+"_"+p2(d.getHours())+p2(d.getMinutes())+p2(d.getSeconds())+".wav";
-    document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},2000);
+    const d=new Date(),p2=x=>String(x).padStart(2,"0"),stamp=d.getFullYear()+p2(d.getMonth()+1)+p2(d.getDate())+"_"+p2(d.getHours())+p2(d.getMinutes())+p2(d.getSeconds());
+    const save=(blob,name)=>{const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},2000)};
+    save(new Blob(parts,{type:"audio/wav"}),"DI_"+stamp+".wav");
+    const mk=s.marks||[];
+    if(mk.length>1){/* where each take starts, to cut the long file back into takes*/
+      let tx="take,start_seconds,start_frame\n";mk.forEach((m,i)=>{tx+=(i+1)+","+(m/s.rate).toFixed(3)+","+m+"\n"});
+      setTimeout(()=>save(new Blob([tx],{type:"text/csv"}),"DI_"+stamp+"_takes.csv"),600);
+    }
   }catch(e){alert("Download failed: "+e.message)}
   finally{diBusy=false;diRefresh()}
 }
@@ -2347,25 +2390,26 @@ function diCard(){
   const c=el("div","card th");diEl=c;
   const h=el("h3","");h.appendChild(el("span","nm","DI recorder"));c.appendChild(h);
   diStat=el("div","info","");c.appendChild(diStat);
-  c.appendChild(el("div","info","Records the raw guitar input (both channels, 24 bit, before any effect) in the board's memory, then downloads it as a WAV file. Press Start, play, and download the file when the recording is done. Starting a new recording replaces the previous one."));
+  c.appendChild(el("div","info","Records the raw guitar input (both channels, 24 bit, before any effect) in the board's memory, up to about 10 minutes, then downloads it as a WAV file. Tick \"Add to the recording\" to keep what is already recorded and add a new take after it: the takes join into one long file, and a small .csv file says where each one starts. Download the file when you have finished playing (the download is web traffic)."));
   const bar=el("div","row");
-  diSecs=document.createElement("input");diSecs.type="number";diSecs.min="1";diSecs.max="40";diSecs.value="20";diSecs.style.width="4em";
-  bar.appendChild(diSecs);bar.appendChild(el("span","info"," seconds (1-40) "));
+  diSecs=document.createElement("input");diSecs.type="number";diSecs.min="1";diSecs.max="600";diSecs.value="60";diSecs.style.width="4.5em";
+  bar.appendChild(diSecs);bar.appendChild(el("span","info"," seconds (1-600) "));
+  const lb=document.createElement("label");lb.style.cssText="display:inline-flex;align-items:center;gap:4px;margin:0 8px";
+  diApp=document.createElement("input");diApp.type="checkbox";lb.appendChild(diApp);lb.appendChild(document.createTextNode("Add to the recording"));bar.appendChild(lb);
   bar.appendChild(btn("Start","Start recording the input",async()=>{
-    const s=Math.max(1,Math.min(40,parseInt(diSecs.value)||20));
-    const r=await g({op:"di",v:1,s:s});
+    const s=Math.max(1,Math.min(600,parseInt(diSecs.value)||60));
+    const r=await g({op:"di",v:1,s:s,a:diApp.checked?1:0});
     if(!(r&&r.ok)){alert((r&&r.err)||"error");return}
     if(!diTimer)diTimer=setInterval(diRefresh,500);
     setTimeout(diRefresh,300);
   }));
   bar.appendChild(btn("Stop","Stop the recording now",async()=>{await g({op:"di",v:2});setTimeout(diRefresh,300)}));
   bar.appendChild(btn("Download WAV","Download the recording as a WAV file",diDownload));
-  bar.appendChild(btn("Free memory","Delete the recording from the board's memory",async()=>{await g({op:"di",v:3});setTimeout(diRefresh,300)}));
+  bar.appendChild(btn("Free memory","Delete the recording from the board's memory",async()=>{if(!confirm("Delete the whole recording from the board's memory?"))return;await g({op:"di",v:3});setTimeout(diRefresh,300)}));
   c.appendChild(bar);
   diRefresh();
   return c;
-}
-/* ---- fallback network: if the home network is not found at power-on, the board creates its own protected Wi-Fi network (WPA2) ----*/
+}/* ---- fallback network: if the home network is not found at power-on, the board creates its own protected Wi-Fi network (WPA2) ----*/
 let APC=null,apEl=null;
 async function apLoad(){try{APC=await (await fetch("/ap?_="+Date.now(),{cache:"no-store"})).json()}catch(e){APC=null}}
 const apOk=(s,a,b)=>/^[A-Za-z0-9_.-]+$/.test(s)&&s.length>=a&&s.length<=b;
@@ -2452,7 +2496,13 @@ function upd(){
   {const fv=$("fwver");if(fv&&S.ver)fv.textContent=S.ver}
   $("sub").textContent=S.ip+gnm+" · on for "+Math.floor(S.up/60)+" min · CPU "+c.avg.toFixed(1)+"% (peak "+c.max.toFixed(1)+"%) · latency "+lat.toFixed(2)+" ms · "+(S.rate/1000)+" kHz, block "+S.frames+" frame · NAM "+S.board.nam+"/"+S.board.max+(S.safe?" · SAFE MODE":"");
 }
-let ovLast=0,ovAt=0,LIBC=null,LIBV=-1;
+let ovLast=0,ovAt=0,LIBC=null,LIBV=-1,BPC=null,BPV=-1;
+/* saved block settings are in /bpl: they are re-read only when "bv" of /status changes (a status without "bv" keeps an empty list)*/
+async function bpSync(bv){
+  if(bv===undefined){if(!BPC)BPC={bp:[]};return}
+  if(BPC&&bv===BPV)return;
+  try{const j=await (await fetch("/bpl?_="+Date.now(),{cache:"no-store"})).json();BPC=j;BPV=j.bv}catch(e){if(!BPC)BPC={bp:[]}}
+}
 /* models, IRs and information are in /lib (about 10 KB): they are re-read only when "lv" of /status changes*/
 async function libSync(lv){
   if(LIBC&&lv===LIBV)return;
@@ -2462,7 +2512,7 @@ async function libSync(lv){
 /* re-reads the state from the board once, without restarting the page's update cycle (needed by the automatic branch alignment)*/
 async function stNow(){
   const r=await fetch("/status?_="+Date.now(),{cache:"no-store"});S=await r.json();
-  await libSync(S.lv);S.lib=LIBC.lib.slice();S.ir=LIBC.ir.slice();S.libinf=LIBC.libinf.slice();
+  await libSync(S.lv);S.lib=LIBC.lib.slice();S.ir=LIBC.ir.slice();S.libinf=LIBC.libinf.slice();await bpSync(S.bv);S.bp=BPC.bp.slice();
 }
 async function poll(){
   let ok=true;
@@ -2472,7 +2522,7 @@ async function poll(){
     setTimeout(poll,1000);return}
   try{
     const r=await fetch("/status?_="+Date.now(),{cache:"no-store"});S=await r.json();
-    await libSync(S.lv);S.lib=LIBC.lib.slice();S.ir=LIBC.ir.slice();S.libinf=LIBC.libinf.slice();
+    await libSync(S.lv);S.lib=LIBC.lib.slice();S.ir=LIBC.ir.slice();S.libinf=LIBC.libinf.slice();await bpSync(S.bv);S.bp=BPC.bp.slice();
     const s=location.hash+"#"+(S.board.mode||0)+"#"+S.board.s+(S.board.net?JSON.stringify(S.board.net.links)+JSON.stringify(S.board.net.io):"")+"#"+S.lib.join(",")+"#"+S.fav.join(",")+"#"+(S.bp||[]).map(b=>b.n+b.d).join(";")+"#"+(S.pre||[]).join(",")+(S.prm||"")+"#"+(S.pc||"")+(S.pd?"*":"");
     {const pcNow=S.pc||"";if(anPcSeen!==null&&anPcSeen!==pcNow)anOn=false;anPcSeen=pcNow}
     if(s!==sig&&drag===null){sig=s;build()}

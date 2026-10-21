@@ -80,8 +80,12 @@ public:
 
 	// DI recorder: raw 24-bit stereo input before any processing (up to DI_MAX_SECONDS), read back by the web page.
 	// DiPrepare and DiFree are called by the main loop (they allocate); the callback only fills the chunks.
-	enum { DI_CHUNK_FRAMES = 16384, DI_MAX_CHUNKS = 120 };
-	boolean DiPrepare (unsigned nSeconds);			// allocates the buffer and starts recording (FALSE: no memory)
+	enum { DI_CHUNK_FRAMES = 16384, DI_MAX_CHUNKS = 1800, DI_MAX_MARKS = 64 };		// 1800 chunks of 128 KB = about 614 s of stereo
+	// allocates the buffer and starts recording (FALSE: no memory or the buffer is full). With bAppend the previous recording is kept and the new take is added after it.
+	boolean DiPrepare (unsigned nSeconds, boolean bAppend = FALSE);
+	unsigned DiMaxFrames (void) const { return DI_MAX_CHUNKS * DI_CHUNK_FRAMES; }
+	unsigned DiMarkCount (void) const { return m_nDiMarks; }	// start frame of each take
+	unsigned DiMark (unsigned i) const { return m_nDiMark[i < DI_MAX_MARKS ? i : 0]; }
 	void DiStop (void) { if (m_nDiState == 1) m_nDiState = 2; }
 	unsigned DiState (void) const { return m_nDiState; }		// 0 = empty, 1 = recording, 2 = done
 	unsigned DiFrames (void) const { return m_nDiFrames; }	// frames recorded so far
@@ -103,6 +107,8 @@ private:
 	volatile unsigned m_nDiState;
 	volatile unsigned m_nDiFrames;
 	unsigned m_nDiTarget;
+	unsigned m_nDiMarks;
+	unsigned m_nDiMark[DI_MAX_MARKS];
 
 	COscillator m_Tone440;
 	COscillator m_Tone880;

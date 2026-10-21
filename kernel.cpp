@@ -700,10 +700,15 @@ void CKernel::ControlInit (void)
 	m_Ctl.pFav = m_Fav;
 	m_Ctl.pFavCount = &m_nFav;
 	m_Ctl.FavDirty = FALSE;
+	m_BpName = new char[BP_MAX][BP_NAME_LEN];
+	m_BpData = new char[BP_MAX][BP_DATA_LEN];
+	memset (m_BpName, 0, (size_t) BP_MAX * BP_NAME_LEN);
+	memset (m_BpData, 0, (size_t) BP_MAX * BP_DATA_LEN);
 	m_Ctl.pBpName = m_BpName;
 	m_Ctl.pBpData = m_BpData;
 	m_Ctl.pBpCount = &m_nBp;
 	m_Ctl.BpDirty = FALSE;
+	m_Ctl.BpVer = 1;
 	m_Ctl.pPreName = m_PreName;
 	m_Ctl.pPreMode = m_PreMode;
 	m_Ctl.PreCur[0] = 0;
@@ -722,6 +727,9 @@ void CKernel::ControlInit (void)
 	m_Ctl.TestMask = 0;
 	m_Ctl.DiReq = 0;
 	m_Ctl.DiSeconds = 0;
+	m_Ctl.DiAppend = 0;
+	m_Ctl.DiMax = 0;
+	m_Ctl.DiMarkN = 0;
 	m_Ctl.DiState = 0;
 	m_Ctl.DiFrames = 0;
 	m_Ctl.DiTarget = 0;
@@ -2129,6 +2137,7 @@ void CKernel::BpLoad (void)
 		}
 	}
 	m_nBp = nCount;
+	m_Ctl.BpVer++;
 	m_Logger.Write (FromKernel, LogNotice, "Block settings loaded: %u", nCount);
 }
 
@@ -3497,10 +3506,14 @@ void CKernel::ControlTick (void)
 		m_Ctl.DiReq = 0;
 		if (nReq == 1)
 		{
-			if (!m_pSound->DiPrepare (m_Ctl.DiSeconds))
+			const boolean bAppend = m_Ctl.DiAppend != 0;
+			if (!m_pSound->DiPrepare (m_Ctl.DiSeconds, bAppend))
 			{
-				m_pSound->DiFree ();
-				m_Logger.Write (FromKernel, LogWarning, "DI recorder: not enough memory");
+				if (!bAppend)
+				{
+					m_pSound->DiFree ();
+				}
+				m_Logger.Write (FromKernel, LogWarning, "DI recorder: not enough memory or the buffer is full");
 			}
 			else
 			{
@@ -3519,6 +3532,12 @@ void CKernel::ControlTick (void)
 	m_Ctl.DiState = m_pSound->DiState ();
 	m_Ctl.DiFrames = m_pSound->DiFrames ();
 	m_Ctl.DiTarget = m_pSound->DiTarget ();
+	m_Ctl.DiMax = m_pSound->DiMaxFrames ();
+	m_Ctl.DiMarkN = m_pSound->DiMarkCount ();
+	for (unsigned i = 0; i < m_Ctl.DiMarkN && i < 64; i++)
+	{
+		m_Ctl.DiMark[i] = m_pSound->DiMark (i);
+	}
 
 	// test source: turns off by itself after 2 minutes
 	if (m_Ctl.TestPending)

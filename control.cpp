@@ -507,20 +507,22 @@ THTTPStatus CControl::HandleBoard (const char *pFormData, u8 *pBuffer, unsigned 
 
 	if (strcmp (Op, "di") == 0)
 	{
-		// DI recorder: v = 1 start (s = seconds, 1..40), 2 stop, 3 free the memory
-		int nV = 0, nS = 10;
-		boolean bV = FALSE, bS = FALSE;
+		// DI recorder: v = 1 start (s = seconds, 1..600; a = 1 adds the take after the existing recording), 2 stop, 3 free the memory
+		int nV = 0, nS = 10, nA = 0;
+		boolean bV = FALSE, bS = FALSE, bA = FALSE;
 		if (!FieldInt (pFormData, "v", &nV, &bV) || !bV || nV < 1 || nV > 3)
 		{
 			return Reply (pBuffer, pLength, ppContentType, "{\"ok\":0,\"err\":\"v from 1 to 3\"}");
 		}
 		if (nV == 1)
 		{
-			if (!FieldInt (pFormData, "s", &nS, &bS) || !bS || nS < 1 || nS > 40)
+			if (!FieldInt (pFormData, "s", &nS, &bS) || !bS || nS < 1 || nS > 600)
 			{
-				return Reply (pBuffer, pLength, ppContentType, "{\"ok\":0,\"err\":\"s (seconds) from 1 to 40\"}");
+				return Reply (pBuffer, pLength, ppContentType, "{\"ok\":0,\"err\":\"s (seconds) from 1 to 600\"}");
 			}
 			m_pContext->DiSeconds = (unsigned) nS;
+			(void) FieldInt (pFormData, "a", &nA, &bA);
+			m_pContext->DiAppend = (bA && nA == 1) ? 1 : 0;
 		}
 		m_pContext->DiReq = (unsigned) nV;
 		return Reply (pBuffer, pLength, ppContentType, "{\"ok\":1}");
@@ -1382,6 +1384,7 @@ THTTPStatus CControl::HandleBp (const char *pFormData, u8 *pBuffer, unsigned *pL
 		return Reply (pBuffer, pLength, ppContentType, "{\"ok\":0,\"err\":\"unknown operation\"}");
 	}
 	m_pContext->BpDirty = TRUE;
+	m_pContext->BpVer++;
 	return Reply (pBuffer, pLength, ppContentType, "{\"ok\":1}");
 }
 
@@ -2202,7 +2205,7 @@ if (strcmp (pPath, "/fx") == 0)
 		boolean bO = FALSE, bN = FALSE;
 		if (FieldInt (pParams, "o", &nOff, &bO) && bO && FieldInt (pParams, "n", &nCnt, &bN) && bN)
 		{
-			if (nOff < 0 || nCnt < 1 || nCnt > 16000 || m_pContext->pDiRead == 0 || (unsigned) nCnt * 6 > *pLength)
+			if (nOff < 0 || nCnt < 1 || nCnt > 32000 || m_pContext->pDiRead == 0 || (unsigned) nCnt * 6 > *pLength)
 			{
 				return HTTPBadRequest;
 			}
@@ -2220,7 +2223,18 @@ if (strcmp (pPath, "/fx") == 0)
 		B.I (m_pContext->DiTarget);
 		B.S (",\"rate\":");
 		B.I (m_pContext->pStatus->nSampleRate);
-		B.C ('}');
+		B.S (",\"max\":");
+		B.I (m_pContext->DiMax);
+		B.S (",\"marks\":[");
+		for (unsigned i = 0; i < m_pContext->DiMarkN && i < 64; i++)
+		{
+			if (i > 0)
+			{
+				B.C (',');
+			}
+			B.I (m_pContext->DiMark[i]);
+		}
+		B.S ("]}");
 		if (B.Overflow ())
 		{
 			return HTTPInternalServerError;
@@ -2262,6 +2276,35 @@ if (strcmp (pPath, "/fx") == 0)
 				B.C (',');
 			}
 			B.Esc (m_pContext->pLibInf[i]);
+		}
+		B.S ("]}");
+		if (B.Overflow ())
+		{
+			return HTTPInternalServerError;
+		}
+		*pLength = B.Length ();
+		*ppContentType = "application/json\r\nCache-Control: no-store";
+		return HTTPOK;
+	}
+
+	if (strcmp (pPath, "/bpl") == 0)
+	{
+		// saved block settings: only their version "bv" is in /status, the page reads this list when it changes
+		CBuf B (pBuffer, *pLength);
+		B.S ("{\"bv\":");
+		B.I (m_pContext->BpVer);
+		B.S (",\"bp\":[");
+		for (unsigned i = 0; i < *m_pContext->pBpCount; i++)
+		{
+			if (i > 0)
+			{
+				B.C (',');
+			}
+			B.S ("{\"n\":");
+			B.Esc (m_pContext->pBpName[i]);
+			B.S (",\"d\":");
+			B.Esc (m_pContext->pBpData[i]);
+			B.C ('}');
 		}
 		B.S ("]}");
 		if (B.Overflow ())
@@ -2407,20 +2450,9 @@ if (strcmp (pPath, "/fx") == 0)
 			}
 			B.Esc (m_pContext->pFav[i]);
 		}
-		B.S ("],\"bp\":[");
-		for (unsigned i = 0; i < *m_pContext->pBpCount; i++)
-		{
-			if (i > 0)
-			{
-				B.C (',');
-			}
-			B.S ("{\"n\":");
-			B.Esc (m_pContext->pBpName[i]);
-			B.S (",\"d\":");
-			B.Esc (m_pContext->pBpData[i]);
-			B.C ('}');
-		}
-		B.S ("],\"upl\":{\"n\":");
+		B.S ("],\"bv\":");
+		B.I (m_pContext->BpVer);
+		B.S (",\"upl\":{\"n\":");
 		B.Esc (m_pContext->UpResName);
 		B.S (",\"ok\":");
 		B.I (m_pContext->UpResOk > 0 ? 1 : (m_pContext->UpResOk < 0 ? 2 : 0));

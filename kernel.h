@@ -205,8 +205,8 @@ private:
 	char			m_LibInf[LIB_MAX_FILES][UP_INF_MAX + 8];	// author and license of the models (NAME.inf)
 	char			m_Fav[LIB_MAX_FILES][PARAM_TEXT_LEN];	// favorite models
 	volatile unsigned	m_nFav;
-	char			m_BpName[BP_MAX][BP_NAME_LEN];	// saved block settings
-	char			m_BpData[BP_MAX][BP_DATA_LEN];
+	char			(*m_BpName)[BP_NAME_LEN];	// saved block settings (allocated from the heap in the constructor)
+	char			(*m_BpData)[BP_DATA_LEN];
 	volatile unsigned	m_nBp;
 	char			m_PreName[PRE_MAX][BP_NAME_LEN];	// pedalboard presets by position (all the modes)
 	u8			m_PreMode[PRE_MAX];		// mode of each preset

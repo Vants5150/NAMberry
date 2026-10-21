@@ -4,18 +4,18 @@ Only settings with a citable source. Not created because there is no reliable so
 
 ADELScreamerTS (Tube Screamer) - Reverb News, "How to Use Your Tube Screamer to Dial-In the Tones of Five Famous Players", Zack Hillman, 15/12/2017
   https://reverb.com/news/how-to-use-your-tube-screamer-to-dial-in-the-tones-of-five-famous-players
-  SRV (Reverb)            TS808  Drive 8:30 (1.5)  Tone Max (10)      Level 3:00 (8)
-  Anastasio 1 (Reverb)    TS9    Drive 9:00 (2)    Tone 1:30 (6.5)    Level Max (10)
-  Anastasio 2 (Reverb)    TS9    Drive Max (10)    Tone 1:30 (6.5)    Level Max (10)
-  Hammett (Reverb)        TS9    Drive Max (10)    Tone 5:00 (10)     Level 1:00 (6)
-  The Edge (Reverb)       TS9    Drive 2:00 (7)    Tone 11:00 (4)     Level 12:00 (5)
-  Bonamassa (Reverb)      TS808  Drive 1:00 (6)    Tone 1:30 (6.5)    Level 3:00 (8)
+  SRV (Reverb.com)            TS808  Drive 8:30 (1.5)  Tone Max (10)      Level 3:00 (8)
+  Anastasio 1 (Reverb.com)    TS9    Drive 9:00 (2)    Tone 1:30 (6.5)    Level Max (10)
+  Anastasio 2 (Reverb.com)    TS9    Drive Max (10)    Tone 1:30 (6.5)    Level Max (10)
+  Hammett (Reverb.com)        TS9    Drive Max (10)    Tone 5:00 (10)     Level 1:00 (6)
+  The Edge (Reverb.com)       TS9    Drive 2:00 (7)    Tone 11:00 (4)     Level 12:00 (5)
+  Bonamassa (Reverb.com)      TS808  Drive 1:00 (6)    Tone 1:30 (6.5)    Level 3:00 (8)
   (SRV: the article says "TS808, TS9, TS10"; TS808 chosen.)
 
 ADELBigMuffReal - Reverb News, "How to Use Big Muffs to Dial-In the Tone of Five Famous Guitarists", Zack Hillman, 27/12/2017
   https://reverb.com/news/how-to-use-big-muffs-to-dial-in-the-tone-of-five-famous-guitarists
-  Gilmour Rams Head (Reverb)  Ram's Head  Volume 12:00 (5)  Tone 2:00 (7)   Sustain 9:00 (2)
-  Mascis Rams Head (Reverb)   Ram's Head  Volume Max (10)    Tone 11:00 (4)  Sustain Max (10)
+  Gilmour Rams Head (Reverb.com)  Ram's Head  Volume 12:00 (5)  Tone 2:00 (7)   Sustain 9:00 (2)
+  Mascis Rams Head (Reverb.com)   Ram's Head  Volume Max (10)    Tone 11:00 (4)  Sustain Max (10)
   (the article does not say which Ram's Head: the block's V3 1976 version was chosen. Fogerty, Corgan, Auerbach and Bootsy use models the block does not have: Civil War, op-amp, Green Russian, Bass Muff.)
 
 ADELCentaurReal (Klon) - Guitar World, "John Mayer signs fan's Klon Centaur onstage and marks his specific settings", Matt Owen, 11/05/2022
@@ -49,3 +49,15 @@ ADELDynaCompReal - "Country (Deluxe review)": a German review of the Dyna Comp D
 ADELGuvnorReal / ADELToneStackReal - Guitar Chalk, "Are You Gonna Go My Way" (Lenny Kravitz): Bass 5, Middle 6, Treble 7 on a Marshall Super Lead AMP. Used as an EQ voicing for the Guv'nor (Gain 6, Level 5 are mine) and for the tone stack (JTM45 values).
 (typical) presets, based only on how the controls are described: DS-1 "Aggressive" (more aggressive as Level goes down and Dist up, Gearank), Phase 90 slow and fast (slow = gradual sweep, fast = rotary-like), CE-2 "Depth up" (Equipboard note "Depth up"), Rangemaster "Full boost", Uni-Vibe chorus and vibrato, Dimension D modes 1 and 3+4 (mode 1 widest, 3+4 tight, from the SDD-320 service note figures), AD9 slapback and ambient (short time, low repeat / long time, higher repeat), Cry Baby "Cocked wah", Micro Flanger "Slow jet", Klon "Low gain boost".
 Not found anywhere: documented knob settings of famous players for the Rangemaster, Tone Bender MkII, DS-1, Guv'nor, Phase 90, Uni-Vibe, CE-2, Dimension D, AD9, Cry Baby and M117 (searches 2026-10-21). Several articles only say who used the pedal, not how it was set.
+== Added 2026-10-21 (194 more: four settings for every effect; the board needs firmware mcore94 or later, which holds 256 block settings) ==
+Name tags: (typical) = my own choice, built from how the controls are described, NOT a documented setting of a player; (guides) / (forum) / (Edge) / (Leslie) / (Mu-Tron) / (Fractal) = the figures come from the sources below; (tool) = measurement helpers.
+Delays (ADELdelay, mono, EchoPlex, ducking): slapback 70-150 ms with about one repeat, 100 ms the usual starting point (Bonedo, Yamaha Hub, a Heritage Guitars forum thread; the EHX Slap-Back has 45/65/100 ms). The Edge: dotted eighth 360 ms and quarter 480 ms at 125 bpm in "Where the Streets Have No Name" (Total Guitar), low feedback and wet about equal to dry (Premier Guitar "Electric Etudes: U2's The Edge").
+Reverbs: room under 1 s, plate 1.5-2.5 s with 20-40 ms pre-delay, hall 2-4 s, cathedral pre-delay 50 ms or more, guitar mix about 15 % and decay under 2 s (mixing guides: musicstreet.co.uk, nailthemix.com).
+Compressors: start at 3:1, attack 3-5 ms, release about 50 ms (musicguymixing.com guides); Fractal Audio forum named settings "country" (6:1, 1 ms, 25 ms), "chunky" (5:1, 11 ms, 102 ms), "ringy sustain" (10:1, 150 ms, 987 ms), on that unit's own scale: https://forum.fractalaudio.com/goto/post?id=1362210
+Equalizer: high-pass 80-120 Hz, low-pass 8-10 kHz, mud 300-500 Hz, fizz 5-6.5 kHz (Violet Recording, Fractal Audio forum; they are also cited by the page's preset analysis).
+Rotary: Leslie chorale about 0.8 Hz (40-50 rpm), tremolo 5.7-6.8 Hz (340-400 rpm) (Wikipedia "Leslie speaker", diyAudio thread "leslie speaker spin speed"). The block's speeds are fixed.
+Envelope filter: Mu-Tron III notes (Guitar World, Premier Guitar): low-pass for funk, Up = classic quack, Down = swoop, Lo range for rhythm. No knob positions were given anywhere.
+Tremolo: a Moog forum thread matching a Vibrolux Reverb gives Speed "a hair under 4 to 8" and Intensity 0-3 on the amp's dial, not in Hz, so the tremolo presets are (typical).
+Noise gate: guides give only behaviour (threshold just above the noise floor, hold above zero avoids chatter), no values: (typical).
+Circuit-model pedals completed to four settings each with (typical) values, plus a few from forums: OC-2 "synth oct1" (users raise Oct 1 and lower Direct), Dimension D modes 2 and 2+4 (delays and LFO speeds from the SDD-320 service note), Rangemaster capacitor modifications (ElectroSmash lists 10, 15, 47 and 100 nF), DS-1 "all noon" (the baseline Gearank used in its test).
+Parameter conversions: the switch positions follow the labels in the firmware (for example the Spring block's "springs" value 0, 1, 2 means 1, 2, 3 springs).

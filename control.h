@@ -15,7 +15,7 @@ class CFeatures;
 #define UP_INF_MAX	120		// author/license text next to the model (in the real files they are at most 48 characters)
 #define MODE_NONE	9		// no mode change requested
 #define PRE_MAX		48		// pedalboard presets (one file each on the card)
-#define BP_MAX		48		// saved block settings
+#define BP_MAX		256		// saved block settings (heap: see CKernel; the page reads the list from /bpl)
 #define BP_NAME_LEN	32
 #define BP_DATA_LEN	800
 
@@ -73,6 +73,7 @@ struct TCtlContext
 	char (*pBpData)[BP_DATA_LEN];
 	volatile unsigned *pBpCount;
 	volatile boolean BpDirty;
+	volatile unsigned BpVer;		// changes at every save or delete of a block setting: the page re-reads /bpl when it changes
 	u8 *pUpBuf;				// upload of a model from the page: area where the pieces are collected
 	char UpName[48];
 	unsigned UpTotal, UpGot;
@@ -95,6 +96,10 @@ struct TCtlContext
 	// DI recorder (raw input recording, see CPisoundSound::DiPrepare): the page asks, the main loop runs it
 	volatile unsigned DiReq;		// 0 none, 1 start, 2 stop, 3 free the memory
 	volatile unsigned DiSeconds;
+	volatile unsigned DiAppend;		// 1 = add the new take after the existing recording
+	volatile unsigned DiMax;		// frames the buffer can hold
+	volatile unsigned DiMarkN;		// number of takes and their start frames
+	unsigned DiMark[64];
 	volatile unsigned DiState;		// 0 empty, 1 recording, 2 done (published by the main loop)
 	volatile unsigned DiFrames;
 	volatile unsigned DiTarget;

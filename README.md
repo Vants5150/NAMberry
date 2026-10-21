@@ -68,7 +68,7 @@ On the running board with a test preset (one NAM, eleven other blocks, four core
 | One NAM A2 model as `.adn` (8 channels, 23 layers, 12,146 weights, receptive field 6,347 samples) | 48,880 bytes |
 | A library of 282 models | about 13.8 MB (calculated: 282 x 48,880 bytes) |
 | Web page as served (gzip) | 63,364 bytes (source `control_page.h` is 190 KB) |
-| DI recorder buffer | up to about 15.7 MB for 40 s of 24-bit stereo, allocated only while a recording exists |
+| DI recorder buffer | up to about 236 MB for 614 s of 24-bit stereo (stored as 32-bit words), allocated only while a recording exists |
 | Free heap reported by the firmware after boot | about 4.1 million KB |
 ## Features in detail
 
@@ -76,7 +76,7 @@ On the running board with a test preset (one NAM, eleven other blocks, four core
 
 * A 6 x 12 grid. Drag from a block's output port to another block's input port to draw an arrow; the level on every arrow can be changed (in dB) and arrows can run diagonally. Series, parallel branches, splits and mixes are all just arrows. There are two inputs and two outputs.
 * Press and hold a block for about 0.6 s and a trash button appears over it; tap it to remove the block.
-* Every block has its own panel with the controls grouped in sections and a "Saved settings" menu for block presets (the author's board holds 45, installed with `tools/block_presets.py`: Tube Screamer settings from five famous players, two Big Muff settings, a Klon setting, the Fuzz Face manufacturer's starting point, the four example settings of the ZVEX Fuzz Factory manual and others taken from articles and forum posts; the rest are marked `(typical)` and are starting points built on how the controls are described, not documented settings of a player. Every source and every assumption is in `presets_fonti.txt`).
+* Every block has its own panel with the controls grouped in sections and a "Saved settings" menu for block presets (the author's board holds 239, installed with `tools/block_presets.py`: four for every effect, about 45 of them with values from manuals, articles and forum posts (ZVEX Fuzz Factory manual, Tube Screamer and Big Muff settings of famous players, The Edge's dotted-eighth delay, slapback times, reverb decay guides and others); the rest are marked `(typical)` and are starting points built on how the controls are described, not documented settings of a player. Every source and every assumption is in `presets_fonti.txt`).
 
 ![A delay block panel with all its sections open](docs/img/delay_panel.png)
 
@@ -105,7 +105,7 @@ A2 WaveNet captures run in the ADELnam engine. Each model's input level is set f
 
 ### Tools
 
-* **DI recorder**: records the raw guitar input (24-bit stereo, up to 40 s) in memory and downloads it as a WAV file, to build test material, for example for a note tracker.
+* **DI recorder**: records the raw guitar input (24-bit stereo) in memory, up to about 10 minutes, and downloads it as a WAV file; several takes can be added one after the other (a small .csv file says where each starts). It is meant to build test material, for example for a note tracker.
 * **Measurement tools** as blocks: `ADELSendSweep` (sweep, guitar notes, chord or pink noise at the press of a button) and `ADELphase` (polarity, delay, all-pass and phase measurement between two channels).
 * **Service functions** that can be switched on and off from the page: hum, rumble, limiter, mono, air, saturation, click, RTA, tuner and meter.
 ## Hardware

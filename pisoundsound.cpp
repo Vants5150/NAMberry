@@ -94,6 +94,7 @@ CPisoundSound::CPisoundSound (CInterruptSystem *pInterrupt, unsigned nSampleRate
 	m_nDiState = 0;
 	m_nDiFrames = 0;
 	m_nDiTarget = 0;
+	m_nDiMarks = 0;
 	m_fOutPkL = m_fOutPkR = m_fOutSqL = m_fOutSqR = 0.0f;
 	m_nOutStatFrames = 0;
 	for (unsigned i = 0; i < NAM_MAX_BLOCK; i++)
@@ -174,19 +175,28 @@ void CPisoundSound::SetTestSource (unsigned nMask)
 	m_nTestSrc = nMask & 3;
 }
 
-boolean CPisoundSound::DiPrepare (unsigned nSeconds)
+boolean CPisoundSound::DiPrepare (unsigned nSeconds, boolean bAppend)
 {
+	// with bAppend the finished recording is kept and a new take is added after it
+	const unsigned nOld = (bAppend && m_nDiState == 2) ? m_nDiFrames : 0;
+	const unsigned nState = m_nDiState;
 	m_nDiState = 0;
 	if (nSeconds < 1)
 	{
 		nSeconds = 1;
 	}
-	unsigned nFrames = nSeconds * m_nSampleRate;
-	unsigned nChunks = (nFrames + DI_CHUNK_FRAMES - 1) / DI_CHUNK_FRAMES;
-	if (nChunks > DI_MAX_CHUNKS)
+	const unsigned nMax = (unsigned) (DI_MAX_CHUNKS * DI_CHUNK_FRAMES);
+	unsigned long long nWant = (unsigned long long) nOld + (unsigned long long) nSeconds * m_nSampleRate;
+	if (nWant > nMax)
 	{
-		nChunks = DI_MAX_CHUNKS;
+		nWant = nMax;
 	}
+	if (nWant <= nOld)
+	{
+		m_nDiState = nState;		// the buffer is full: nothing changes
+		return FALSE;
+	}
+	const unsigned nChunks = (unsigned) ((nWant + DI_CHUNK_FRAMES - 1) / DI_CHUNK_FRAMES);
 	for (unsigned c = 0; c < nChunks; c++)
 	{
 		if (m_pDiChunk[c] == 0)
@@ -194,21 +204,25 @@ boolean CPisoundSound::DiPrepare (unsigned nSeconds)
 			m_pDiChunk[c] = new s32[DI_CHUNK_FRAMES * 2];
 			if (m_pDiChunk[c] == 0)
 			{
+				m_nDiState = nState;
 				return FALSE;
 			}
 		}
 	}
-	m_nDiTarget = nChunks * DI_CHUNK_FRAMES;
-	if (m_nDiTarget > nFrames)
+	m_nDiTarget = (unsigned) nWant;
+	if (nOld == 0)
 	{
-		m_nDiTarget = nFrames;
+		m_nDiFrames = 0;
+		m_nDiMarks = 0;
 	}
-	m_nDiFrames = 0;
+	if (m_nDiMarks < DI_MAX_MARKS)
+	{
+		m_nDiMark[m_nDiMarks++] = nOld;
+	}
 	asm volatile ("dmb ish" ::: "memory");
 	m_nDiState = 1;
 	return TRUE;
 }
-
 unsigned CPisoundSound::DiRead (unsigned nFrom, unsigned nCount, u8 *pOut) const
 {
 	if (m_nDiState == 1 || nFrom >= m_nDiFrames)
@@ -244,6 +258,7 @@ void CPisoundSound::DiFree (void)
 	}
 	m_nDiFrames = 0;
 	m_nDiTarget = 0;
+	m_nDiMarks = 0;
 }
 
 void CPisoundSound::GetOutputStats (float *pPeakL, float *pPeakR, float *pSumSqL, float *pSumSqR, unsigned *pFrames)
