@@ -19,7 +19,7 @@ A bare-metal guitar multi-effects processor for the **Raspberry Pi 5** with a **
 
 ![The pedalboard grid in the web page](docs/img/pedalboard.png)
 
-*The web page served by the board: a test preset with a NAM capture, compressor, noise gate, flanger, two choruses, delays, reverb, spring and tone stack, linked with series, parallel and stereo routes.*
+*The web page served by the board, showing a test preset with two NAM captures, compressor, noise gate, MXR 117 flanger, Boss CE-1 and CE-2 chorus models, ducking delay, delay, reverb, spring reverb and tone stack, linked with series, parallel and stereo routes.*
 
 ## Measured figures
 
@@ -70,6 +70,44 @@ On the running board with a test preset (one NAM, eleven other blocks, four core
 | Web page as served (gzip) | 63,364 bytes (source `control_page.h` is 190 KB) |
 | DI recorder buffer | up to about 15.7 MB for 40 s of 24-bit stereo, allocated only while a recording exists |
 | Free heap reported by the firmware after boot | about 4.1 million KB |
+## Features in detail
+
+### Pedalboard and blocks
+
+* A 6 x 12 grid. Drag from a block's output port to another block's input port to draw an arrow; the level on every arrow can be changed (in dB) and arrows can run diagonally. Series, parallel branches, splits and mixes are all just arrows. There are two inputs and two outputs.
+* Press and hold a block for about 0.6 s and a trash button appears over it; tap it to remove the block.
+* Every block has its own panel with the controls grouped in sections and a "Saved settings" menu for block presets (11 are included: Tube Screamer settings from five famous players, two Big Muff settings, a Klon setting and the Fuzz Face manufacturer's starting point, each with its source in `presets_fonti.txt`; for the other pedals no citable settings were found, so none were made up).
+
+![A delay block panel with all its sections open](docs/img/delay_panel.png)
+
+### Preset analysis
+
+The magnifier button next to the preset name opens an analysis of the preset. **It does not listen to the sound**: it reads the structure of the pedalboard and tells you, block by block, what looks wrong, why, and what to do about it, with buttons that select the blocks involved and an "Ignore" button for advice you disagree with (remembered per preset). It checks:
+
+* **Routing:** no input or no output connected, blocks that receive no signal or whose output goes nowhere (a NAM or Cab IR in that state is not computed, so it does not use CPU), blocks that are switched off, a stereo block that ends on a single output, one output channel left silent.
+* **Levels:** the estimated gain from input to output, based on the arrows' dB and the Volume and Pan controls; a warning when the signal is very low. For every NAM block it compares the input level you set with the level the capture was made at and warns when it is far off.
+* **Phase between parallel branches:** when two branches that contain different amp or cabinet models start from the same signal and are summed again, they can cancel each other (comb filtering). The analysis explains where the first notch falls for a given delay and offers the measurement below.
+* **Order and tone advice** for a guitar chain: reverb or delay placed before a NAM, no cabinet or equalizer after a NAM when the output goes to headphones or a mixer, a high cut left open after a distorted sound, a boost in the 200-500 Hz "mud" zone, a treble shelf after distortion, high gain without a noise gate. The "After the output there is" selector tells it whether a power amp and cabinet follow (then it does not suggest cabinet or EQ). Every piece of advice cites the forum posts, articles or manuals it comes from; these are indications from players' experience, not measurements.
+* **Measure the phase:** a button that does by itself what used to be done by hand. It adds a probe block (`ADELSendSweep`) and `ADELphase` to the preset, plays a 10-second sweep with the output muted, reads the verdict (phase OK, invert the polarity of one branch, delay branch A or B, the paths are not correlated, phase rotation) and, if you press "Apply the correction", writes the delay and polarity into `ADELphase`. It then measures again to confirm and puts the preset back as it was.
+
+![The preset analysis panel](docs/img/preset_analysis.png)
+
+### NAM models
+
+A2 WaveNet captures run in the ADELnam engine. Each model's input level is set from the metadata of the capture (`input_level_dbu`) and the interface's measured maximum level; bass, mid and treble controls and a per-block level offset are available. Models are uploaded from the page into the library, with an author/license note stored next to each one.
+
+### Playing live and keeping it running
+
+* **Seamless preset change**: the tails of the old preset's delays and reverbs keep ringing while the new preset starts, and the NAM states, model files and parsed presets are cached so a change takes a few milliseconds.
+* **Concert mode**: boots without Wi-Fi or page, for the safest condition on stage. It can be entered and left with the Pisound button (hold for 3 seconds).
+* **Fallback access point** and **updates over Wi-Fi**, signed with a key on the SD card.
+* **Fan and temperature control**, and a safe mode when the boot is not clean.
+
+### Tools
+
+* **DI recorder**: records the raw guitar input (24-bit stereo, up to 40 s) in memory and downloads it as a WAV file, to build test material, for example for a note tracker.
+* **Measurement tools** as blocks: `ADELSendSweep` (sweep, guitar notes, chord or pink noise at the press of a button) and `ADELphase` (polarity, delay, all-pass and phase measurement between two channels).
+* **Service functions** that can be switched on and off from the page: hum, rumble, limiter, mono, air, saturation, click, RTA, tuner and meter.
 ## Hardware
 
 * Raspberry Pi 5

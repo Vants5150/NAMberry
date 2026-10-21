@@ -1548,7 +1548,7 @@ function analyzeNet(){
       const key=t+":"+Math.min(a,b)+":"+Math.max(a,b);if(seenPair.has(key))continue;seenPair.add(key);
       const names=x=>x.length?x.map(q=>esc(anLab(q.id))).join(", "):"(no block of its own)";
       R("warning","Parallel paths that add up in "+nm(t),
-        nm(a)+" e "+nm(b)+" start from the same signal and meet again. One branch goes through "+names(ha.length?ha:ba)+", the other through "+names(hb.length?hb:bb)+": different models or effects can delay or phase-shift the signal differently and, when summed, produce a comb effect (frequency notches), loss of level or a thin sound. With a delay D between the two paths the first cancellation falls at 1/(2D): about 500 Hz divided by the delay in ms (1 ms -> 500 Hz, 0.5 ms -> 1 kHz), then at 3/(2D), 5/(2D)...; inverting the polarity of one branch moves the notches.",
+        nm(a)+" and "+nm(b)+" start from the same signal and meet again. One branch goes through "+names(ha.length?ha:ba)+", the other through "+names(hb.length?hb:bb)+": different models or effects can delay or phase-shift the signal differently and, when summed, produce a comb effect (frequency notches), loss of level or a thin sound. With a delay D between the two paths the first cancellation falls at 1/(2D): about 500 Hz divided by the delay in ms (1 ms -> 500 Hz, 0.5 ms -> 1 kHz), then at 3/(2D), 5/(2D)...; inverting the polarity of one branch moves the notches.",
         "Press «Measure the phase» in the «Branch phase» section above: it adds the probe and ADELphase by itself, tells you what is wrong, and «Apply the correction» configures them.",
         ha.concat(hb).map(q=>q.id),{kind:"phase",t,a,b});
     }
