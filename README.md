@@ -7,7 +7,7 @@ A bare-metal guitar multi-effects processor for the **Raspberry Pi 5** with a **
 ## What it does
 
 * **Pedalboard grid** (6 rows x 12 columns): place blocks, drag them, draw links between them (series, parallel, splits, mixes), left/right routing, two inputs and two outputs.
-* **Blocks**: about 60 effects, listed in alphabetical order in the add menu (see [EFFECTS.md](EFFECTS.md)), a NAM block, cabinet impulse responses, EQ, delays, reverbs, modulation, dynamics.
+* **Blocks**: about 60 effects (a few of them are new building blocks such as ADELshifter Manual and ADELSecondHand), listed in alphabetical order in the add menu (see [EFFECTS.md](EFFECTS.md)), a NAM block, cabinet impulse responses, EQ, delays, reverbs, modulation, dynamics.
 * **NAM models** in A2 WaveNet form, converted to a compact `.adn` file by `tools/nam2adn.py` and run by the ADELnam engine (`adelnam_engine.hpp`), which is written for this project (no third-party code in the firmware).
 * **Web page** served by the board: presets, per-block controls and meters, model/IR library upload, MIDI settings, service functions, temperature and fan control.
 * **Seamless preset change** (the old preset's delay and reverb tails keep ringing while the new one starts).
@@ -92,11 +92,31 @@ The magnifier button next to the preset name opens an analysis of the preset. **
 
 ![The preset analysis panel](docs/img/preset_analysis.png)
 
-### Harmonizer
+### Harmonizer and the two blocks built around it
 
-* **Manual section:** with Manual on, each of the three voices has down and up arrows that move it by one semitone from the note you are playing now (hold to repeat). The voice is put in Chromatic mode, and the page shows the note being played and the note each voice makes, so a harmony can be built by ear. "Save settings..." stores the three voices as a named setting.
-* **Pitch tracker:** an attack detector limits the analysis window to the new note, the note that is sounding keeps its pitch while its period still fits, and an octave leap without a new attack needs many agreeing readings. On the synthetic test bench (`tools/tracker`) the notes reported shorter than 50 ms fell from 65 to 13, the note changes from 184 to 133 for 160 real notes, and the latency of picked notes from 27 to 18 ms; chords are still not followed as well as single notes.
-* Five presets named "Track 1..5" are made to try the tracker (octave up, octave down, fifth, fifth + octave, third and fifth in E-flat major).
+**ADELshifter** is a three-voice harmonizer for single notes (diatonic voices that follow a scale, or fixed semitones). Its pitch tracker was reworked: an attack detector limits the analysis window to the new note, the note that is sounding keeps its pitch while its period still fits, and an octave leap without a new attack needs many agreeing readings. On the synthetic bench in `tools/tracker` the notes reported shorter than 50 ms fell from 65 to 13, the note changes from 184 to 133 for 160 real notes and the latency of picked notes from 27 to 18 ms; chords are still not followed as well as single notes. Five presets named "Track 1..5" are made to try it.
+
+**ADELshifter Manual** is for when you want to decide every harmony yourself, note by note, and have the block remember it.
+
+* It is the same engine with three Chromatic voices (each one a fixed number of semitones above or below the note you play) and a memory of 12 notes: one entry per note name, the same for every octave.
+* The **Notes** section shows the note you are playing ("Playing: A2", the last note heard is kept). Every voice has a switch, down and up arrows (hold to repeat), the interval and the note it makes ("+7 semitones → E3") and a **volume** slider, so you can decide how loud each voice is.
+* Play a note, listen, move the voices with the arrows until the harmony is right, then press **Save note**: the three settings are stored under that note name. Play the next note, adjust, save again. Every saved note gets a small button with its name: select it to change its setting (the arrows edit it while you hear the result) or press **Delete this note**.
+* A note without a saved setting uses the semitones shown while no saved note is selected, so you can build each new note starting from the previous one.
+* The memory is saved with the block, so it is kept in the preset and in the block's "Saved settings".
+* Limits: a single note at a time (the tracker is monophonic), one entry per note name rather than per octave; the Glide control decides how a voice slides between notes.
+
+![The Notes section of ADELshifter Manual](docs/img/shifter_manual_panel.png)
+
+**ADELSecondHand** simulates a second guitarist playing the same notes or chords like an overdub, not a plain doubler: the little differences of a second take change from one note to the next.
+
+* **Outputs**: *Clean | Hand* sends the guitar unchanged to the left output and the second guitarist to the right one; *Hand | Hand* sends hand 1 to the left and hand 2 to the right. Put a NAM on each output (they are distorted separately, like two real takes) and pan them. With *Hand | Hand* and the clean guitar linked straight from the input with one more arrow you get **three NAMs from one block**. Using the two hands through a single NAM would distort them together, which is cheaper but less convincing.
+* **Timing**: every hand plays a little late (offset, up to 60 ms; the clean guitar cannot be anticipated while you play) and the delay is different at every new note (looseness, up to 40 ms). The change is made at the attack with a short crossfade, so there is no pitch glide.
+* **Pitch**: a slow, irregular drift of a few cents, sharp and flat around the original, different for each hand (Pitch drift and Drift speed). A fixed detune would need processing synchronised to the pitch, so it is not offered.
+* **Playing**: how much louder or softer each note can be (Dynamics), a tilt of the tone and how much it changes at every note (Tone, Tone variation), and a short burst of pick and string noise at the attack (Pick noise).
+* **Attack sensitivity** is the level above which a rise of the signal counts as a new note; **Take** picks a different series of random differences (Take 1, 2, 3... are three different performances).
+* Limits: a chord has one attack, so all its notes move together; it works on the signal before the NAM (the DI), and the realism is judged by ear, not measured.
+
+![The ADELSecondHand panel](docs/img/secondhand_panel.png)
 ### NAM models
 
 A2 WaveNet captures run in the ADELnam engine. Each model's input level is set from the metadata of the capture (`input_level_dbu`) and the interface's measured maximum level; bass, mid and treble controls and a per-block level offset are available. Models are uploaded from the page into the library, with an author/license note stored next to each one.
@@ -133,14 +153,28 @@ You need an `aarch64-linux-gnu` cross toolchain (or build on a Pi 5) and Circle.
    ```
    The patch contains the changes made to Circle (RP1 I2S/DMA buffer alignment and cache handling, Wi-Fi access point support, exception-handler diagnostics, `ARM_ALLOW_MULTI_CORE` enabled and `MAX_TASKS` raised to 48).
 2. In Circle's `Config.mk` set `PREFIX64 = aarch64-linux-gnu-`, `AARCH = 64`, `RASPPI = 5`, then build Circle and the add-ons used by the Makefile (`addon/wlan`, `addon/fatfs`, `addon/SDCard`, `addon/tftpfileserver`, `lib`).
-3. Copy this directory to `circle/addon/wlan/sample/pisound-wifi-test`.
+3. Copy this repository to `circle/addon/wlan/sample/pisound-wifi-test`.
 4. Copy `config_local.h.example` to `config_local.h` and put the address of your PC (syslog and OTA).
 5. Run `make`. The result is `kernel_2712.img`.
 
+## Repository layout
+
+```
+Makefile              builds the firmware (inside Circle's tree, see Building)
+config_local.h.example  copy to config_local.h and edit
+src/                  the firmware: web server, pedalboard engine, effects (fx_*.cpp), MIDI, updates
+src/adel/             the DSP engines of the ADEL family (reverb, delay, harmonizer, ...)
+src/fxshim/           small replacements of the C++ library headers used by the engines on the bare-metal side
+tests/                host tests (test_*.cpp), web page tests (test_*.js), host_shim/
+tools/                nam2adn.py (NAM to .adn), block_presets.py (block settings), tracker/ (pitch tracker bench), mkpagegz.py
+docs/                 screenshots and the sources of the block settings
+circle-patches/       the changes made to Circle
+EFFECTS.md  NOTICE.md  LICENSE
+```
+
 ## Tests
 
-Host tests (plain `g++`, no board needed) cover the DSP engines, the circuit solver and the control logic: files `test_*.cpp`. The page's JavaScript is tested with Node (`test_*.js`, `jscheck.sh`).
-
+Host tests need no board: `tests/run_host_tests.sh` compiles every `tests/test_*.cpp` with g++ (the repository must sit at `circle/addon/wlan/sample/pisound-wifi-test`, so that Circle's headers are found) and prints one result line per test; `tests/run_page_tests.sh` checks the web page with Node.js.
 ## Not included
 
 * **Wi-Fi firmware blobs and Circle boot files**: take them from Circle's distribution (Broadcom/Raspberry Pi license, see [NOTICE.md](NOTICE.md)).

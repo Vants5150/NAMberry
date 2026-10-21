@@ -53,8 +53,12 @@ enum TFxType
 	FxAd9 = 83,
 	// Micro Flanger Real: MXR Micro Flanger from the schematic (fx_mflanger.cpp)
 	FxMicroFlanger = 84,
+	// SecondHand: a second guitarist (an overdub) made from the same signal: output L/R = clean | hand, or hand 1 | hand 2 (fx_extra2.cpp)
+	FxSecondHand = 85,
+	// ADELshifter Manual: harmonizer whose three voices remember their semitones for every note (fx_shifter.cpp)
+	FxShifterManual = 86,
 	FxFirst = 5,
-	FxLast = 84
+	FxLast = 86
 };
 
 enum TFxKind
@@ -345,7 +349,48 @@ inline const TFxParam g_XDuck[] = {XKL("time", "Time", "ms", 20.0f, 1000.0f, 1.0
 inline const TFxParam g_XSustain[] = {XK("sustain", "Sustain", "%", 0.0f, 100.0f, 1.0f, 50.0f, "How high the level is kept while the note decays."), XK("level", "Level", "dB", -24.0f, 12.0f, 0.5f, -6.0f, "Output level."), XK("tone", "Tone", "%", 0.0f, 100.0f, 1.0f, 50.0f, "Low-pass.")};
 inline const char *const g_XSelAB[] = {"A", "B", "C"};
 inline const char *const g_XSelN[] = {"AB", "ABC"};
-inline const TFxParam g_XSel[] = {XC("sel", "Branch", 2.0f, 0.0f, g_XSelAB, "Active branch = the block's output A, B or C (A at the top on the right side). The others stay muted. Double click on the block in the grid = next branch."),
+inline const char *const g_XShGroups[] = {"Main", "Timing", "Pitch", "Playing"};
+inline const char *const g_XShMode[] = {"Clean | Hand", "Hand | Hand"};
+#define XKG(grp, key, label, unit, mn, mx, st, df, hint)	{key, label, unit, mn, mx, st, df, 0, 0, grp, 0, 0, hint}
+#define XCG(grp, key, label, mx, df, en, hint)		{key, label, "", 0.0f, mx, 1.0f, df, 1, 0, grp, en, (u8) (mx + 1), hint}
+inline const TFxParam g_XSecondHand[] = {
+	XCG(0, "mode", "Outputs", 1.0f, 0.0f, g_XShMode, "Clean | Hand: the left output is the guitar as it is, the right one is the second guitarist (put a NAM on each). Hand | Hand: the left output is hand 1 and the right one hand 2; take the clean guitar straight from the input with an extra arrow (so you get three NAMs from one block)."),
+	XKG(0, "level", "Hand level", "dB", -24.0f, 12.0f, 0.5f, 0.0f, "Level of the second guitarist(s)."),
+	XKG(0, "sens", "Attack sensitivity", "dB", -70.0f, -30.0f, 1.0f, -52.0f, "Level above which a rise of the signal counts as a new note: at every new note the hands choose a new timing, intensity and tone."),
+	XKG(0, "take", "Take", "", 0.0f, 99.0f, 1.0f, 1.0f, "Which performance: every number gives a different series of small differences."),
+	XKG(1, "off1", "Hand 1 offset", "ms", 0.0f, 60.0f, 0.5f, 12.0f, "How late hand 1 plays on average (the clean guitar cannot be anticipated while you play)."),
+	XKG(1, "loose1", "Hand 1 looseness", "ms", 0.0f, 40.0f, 0.5f, 6.0f, "How much the timing of hand 1 changes from one note to the next (a random amount up to this many ms, early or late)."),
+	XKG(1, "off2", "Hand 2 offset", "ms", 0.0f, 60.0f, 0.5f, 22.0f, "How late hand 2 plays on average (only with Hand | Hand)."),
+	XKG(1, "loose2", "Hand 2 looseness", "ms", 0.0f, 40.0f, 0.5f, 9.0f, "How much the timing of hand 2 changes from one note to the next (only with Hand | Hand)."),
+	XKG(2, "drift", "Pitch drift", "cent", 0.0f, 30.0f, 0.5f, 6.0f, "Slow, irregular wandering of the pitch, sharp and flat around the original (sloppy bends, string and finger pressure). Different for each hand."),
+	XKG(2, "driftrate", "Drift speed", "Hz", 0.1f, 3.0f, 0.05f, 0.4f, "How fast the pitch wanders."),
+	XKG(3, "dyn", "Dynamics", "dB", 0.0f, 6.0f, 0.1f, 1.5f, "How much louder or softer each note can be than the others (a different touch)."),
+	XKG(3, "tone", "Tone", "", -100.0f, 100.0f, 1.0f, 0.0f, "Tilts the balance of the second guitarist's tone: dark on the left, bright on the right (another pickup, another pick)."),
+	XKG(3, "tonevar", "Tone variation", "%", 0.0f, 100.0f, 1.0f, 25.0f, "How much the tone changes from one note to the next."),
+	XKG(3, "pick", "Pick noise", "%", 0.0f, 100.0f, 1.0f, 20.0f, "A short burst of pick and string noise at every new note.")};inline const char *const g_XSmGroups[] = {"Main", "Voice 1", "Voice 2", "Voice 3", "Note map", "Meters"};
+inline const char *const g_XSmTrack[] = {"Fast", "Normal", "Smooth"};
+#define XTG(grp, key, label, df, hint)	{key, label, "", 0.0f, 1.0f, 1.0f, df, 2, 0, grp, 0, 0, hint}
+#define XOG(grp, key, label, unit, mn, mx, st, hint)	{key, label, unit, mn, mx, st, 0.0f, 3, 0, grp, 0, 0, hint}
+#define XSM_VOICE(grp, n, on, semi, lvl, pan)	XTG(grp, "v" #n "on", "V" #n " On", on, "Turns voice " #n " on."), \
+	XKG(grp, "v" #n "semi", "V" #n " Semitones", "semitone", -24.0f, 24.0f, 1.0f, semi, "Semitones of voice " #n " above (+) or below (-) the note you play, for the notes that have no saved setting."), \
+	XKG(grp, "v" #n "level", "V" #n " Volume", "dB", -36.0f, 6.0f, 0.5f, lvl, "Volume of voice " #n "."), \
+	XKG(grp, "v" #n "pan", "V" #n " Pan", "", -100.0f, 100.0f, 1.0f, pan, "Stereo position of voice " #n ".")
+#define XSM_NOTE(n, name)	XKG(4, "n" #n, name, "", -1.0f, 117648.0f, 1.0f, -1.0f, "Saved semitones of the three voices for the note " name " (packed number; -1 = none). Use the Notes section.")
+inline const TFxParam g_XShifterManual[] = {
+	XKG(0, "dry", "Dry", "dB", -60.0f, 6.0f, 0.5f, 0.0f, "Level of the direct guitar."),
+	XKG(0, "level", "Voices Level", "dB", -24.0f, 12.0f, 0.5f, 0.0f, "Master level of the three voices."),
+	XKG(0, "glide", "Glide", "ms", 1.0f, 400.0f, 1.0f, 20.0f, "How fast a voice slides to its new interval when you play another note."),
+	XCG(0, "tracking", "Tracking", 2.0f, 1.0f, g_XSmTrack, "Fast: it follows immediately; Smooth: more stable on dirty notes."),
+	XKG(0, "gate", "Gate", "dB", -80.0f, -20.0f, 1.0f, -55.0f, "Level under which the pitch is not tracked."),
+	XKG(0, "lowhz", "Lowest note", "Hz", 40.0f, 120.0f, 1.0f, 70.0f, "Lowest frequency the tracker looks for (77.8 Hz is the low E-flat of a guitar tuned a half step down)."),
+	XSM_VOICE(1, 1, 1.0f, 4.0f, -3.0f, -40.0f),
+	XSM_VOICE(2, 2, 0.0f, 7.0f, -4.0f, 40.0f),
+	XSM_VOICE(3, 3, 0.0f, -12.0f, -4.0f, 0.0f),
+	XSM_NOTE(0, "C"), XSM_NOTE(1, "C#"), XSM_NOTE(2, "D"), XSM_NOTE(3, "D#"), XSM_NOTE(4, "E"), XSM_NOTE(5, "F"),
+	XSM_NOTE(6, "F#"), XSM_NOTE(7, "G"), XSM_NOTE(8, "G#"), XSM_NOTE(9, "A"), XSM_NOTE(10, "A#"), XSM_NOTE(11, "B"),
+	XOG(5, "pitch", "Pitch", "Hz", 0.0f, 2000.0f, 1.0f, "Detected frequency."),
+	XOG(5, "note", "Note", "", 0.0f, 127.0f, 0.1f, "Detected MIDI note (60 = middle C)."),
+	XOG(5, "voiced", "Tracking OK", "", 0.0f, 1.0f, 0.001f, "1 when the pitch has been recognized.")};inline const TFxParam g_XSel[] = {XC("sel", "Branch", 2.0f, 0.0f, g_XSelAB, "Active branch = the block's output A, B or C (A at the top on the right side). The others stay muted. Double click on the block in the grid = next branch."),
 	XC("outs", "Outputs", 1.0f, 1.0f, g_XSelN, "How many outputs the selector has: AB = two outputs, ABC = three outputs.")};
 #define XDEF(type, name, title, tab)	{type, name, "ToTest - " title, sizeof tab / sizeof tab[0], tab, 1, g_XGroup, 0}
 #define XDEFN(type, name, title, tab)	{type, name, title, sizeof tab / sizeof tab[0], tab, 1, g_XGroup, 0}	/* without the "ToTest" prefix*/
@@ -400,6 +445,8 @@ inline const TFxDef g_FxDefs[] =
 	XDEFN (FxDuck, "duckdelay", "ADELDuckingDelay", g_XDuck),
 	XDEFN (FxSustain, "sustainer", "ADELSustainer", g_XSustain),
 	XDEFN (FxSelector, "selector", "ADELSelector", g_XSel),
+	{FxSecondHand, "secondhand", "ADELSecondHand", sizeof g_XSecondHand / sizeof g_XSecondHand[0], g_XSecondHand, 4, g_XShGroups, 0},
+	{FxShifterManual, "shiftermanual", "ADELshifter Manual", sizeof g_XShifterManual / sizeof g_XShifterManual[0], g_XShifterManual, 6, g_XSmGroups, 0},
 	XDEFN (FxTubeScreamer, "tubescreamer", "ADELScreamerTS", g_XTube),
 	XDEFN (FxRatTS, "ratts", "ADELRatReal", g_XRatTS),
 	{FxOpticalLA, "opticalla", "ADELOpticalLAReal", sizeof g_XLa / sizeof g_XLa[0], g_XLa, 2, g_XLaGroups, 0},

@@ -208,7 +208,136 @@ int main ()
 		CHECKM (err / 3000 < 0.005, "widener Haas: mean error %g", err / 3000);
 		delete fx;
 	}
-	{	// Fuzz/overdrive: with a large input the output is bounded; the Fuzz Face is asymmetric (a non-zero mean after the DC filter is not guaranteed): the shape is checked
+	{	// SecondHand (mode Clean | Hand): L is the input unchanged; with no looseness or drift R is the input delayed by offset + 1 ms guard; with looseness the delay changes at every attack
+		const unsigned type = FxSecondHand;
+		const unsigned N = 48000 * 4;
+		std::vector<float> in (N, 0.0f);
+		unsigned seed = 12345;
+		for (int b = 0; b < 8; b++)		// eight notes, one every 0.45 s: decaying white noise (its autocorrelation has a single sharp peak, so the delay can be measured)
+		{
+			const unsigned st = 4800 + (unsigned) b * 21600;
+			for (unsigned i = 0; i < 12000 && st + i < N; i++)
+			{
+				const double t = i / (double) FS;
+				seed = seed * 1664525u + 1013904223u;
+				const float nz = (float) ((int) (seed >> 8) - 8388608) / 8388608.0f;
+				in[st + i] = 0.4f * nz * (float) exp (-t * 12.0);
+			}
+		}		auto Run = [&] (float *pOutL, float *pOutR)
+		{
+			CFx *fx = FxCreate (type, FS);
+			for (unsigned b = 0; b < N / 4; b++)
+			{
+				float l[4], r[4]; int m = 1;
+				for (int j = 0; j < 4; j++) l[j] = r[j] = in[b * 4 + j];
+				fx->Process (l, r, 4, &m, g_P);
+				CHECK (m == 0);
+				for (int j = 0; j < 4; j++) { pOutL[b * 4 + j] = l[j]; pOutR[b * 4 + j] = r[j]; }
+			}
+			delete fx;
+		};
+		std::vector<float> oL (N), oR (N);
+		Defaults (type); SetP (type, "off1", 10.0f); SetP (type, "loose1", 0.0f); SetP (type, "drift", 0.0f);
+		SetP (type, "dyn", 0.0f); SetP (type, "tone", 0.0f); SetP (type, "tonevar", 0.0f); SetP (type, "pick", 0.0f);
+		Run (oL.data (), oR.data ());
+		double eL = 0; for (unsigned i = 0; i < N; i++) eL += fabs (oL[i] - in[i]);
+		CHECKM (eL < 1e-3, "secondhand: L is not the clean input (%g)", eL);
+		// R = input delayed by (10 + 1) ms = 528 samples
+		double err = 0, sig = 0;
+		for (unsigned i = 30000; i < 90000; i++) { err += fabs (oR[i] - in[i - 528]); sig += fabs (in[i - 528]); }
+		CHECKM (err < 0.02 * sig, "secondhand: R is not the delayed input (error %g of %g)", err, sig);
+		// looseness: the delay of each note differs and stays inside offset +- looseness
+		Defaults (type); SetP (type, "off1", 14.0f); SetP (type, "loose1", 10.0f); SetP (type, "drift", 0.0f);
+		SetP (type, "dyn", 0.0f); SetP (type, "tonevar", 0.0f); SetP (type, "pick", 0.0f);
+		Run (oL.data (), oR.data ());
+		double lagMin = 1e9, lagMax = -1e9;
+		for (int b = 0; b < 8; b++)
+		{
+			const unsigned st = 4800 + (unsigned) b * 21600 + 3000;		// after the crossfade of the attack
+			double best = -1e9; int bl = 0;
+			for (int l = (int) (2.0 * FS / 1000.0); l <= (int) (40.0 * FS / 1000.0); l++)		// 2 .. 40 ms
+			{
+				double c = 0;
+				for (unsigned i = 0; i < 6000; i++) c += (double) oR[st + i] * in[st + i - (unsigned) l];
+				if (c > best) { best = c; bl = l; }
+			}
+			const double ms = bl * 1000.0 / FS - 1.0;		// minus the 1 ms guard
+			if (ms < lagMin) lagMin = ms;
+			if (ms > lagMax) lagMax = ms;
+		}
+		CHECKM (lagMin >= 14.0 - 10.0 - 0.7 && lagMax <= 14.0 + 10.0 + 0.7, "secondhand: delays out of range (%g .. %g ms)", lagMin, lagMax);
+		CHECKM (lagMax - lagMin > 4.0, "secondhand: the delay does not change from note to note (%g .. %g ms)", lagMin, lagMax);
+		// another take: other delays
+		Defaults (type); SetP (type, "off1", 14.0f); SetP (type, "loose1", 10.0f); SetP (type, "drift", 0.0f); SetP (type, "take", 7.0f);
+		SetP (type, "dyn", 0.0f); SetP (type, "tonevar", 0.0f); SetP (type, "pick", 0.0f);
+		std::vector<float> o2L (N), o2R (N);
+		Run (o2L.data (), o2R.data ());
+		double diff = 0; for (unsigned i = 0; i < N; i++) diff += fabs (o2R[i] - oR[i]);
+		CHECKM (diff > 1.0, "secondhand: a different take gives the same performance");
+		// pitch drift 20 cents at 1 Hz: the frequency of a sustained 300 Hz tone wanders by a few Hz; with no drift it does not
+		auto Wander = [&] (float drift)
+		{
+			Defaults (type); SetP (type, "off1", 10.0f); SetP (type, "loose1", 0.0f); SetP (type, "drift", drift); SetP (type, "driftrate", 1.0f);
+			SetP (type, "dyn", 0.0f); SetP (type, "tonevar", 0.0f); SetP (type, "pick", 0.0f);
+			CFx *fx = FxCreate (type, FS);
+			std::vector<float> sL, sR;
+			RunSine (fx, 300.0f, 0.3f, 192000, sL, sR, 1);
+			delete fx;
+			// instantaneous frequency: demodulate at 300 Hz, smooth over 20 ms, differentiate the phase
+			const unsigned W = 960;
+			double maxDf = 0, prevPh = 0; bool first = true;
+			for (unsigned s = 48000; s + W < 192000; s += W / 2)
+			{
+				double re = 0, im = 0;
+				for (unsigned i = s; i < s + W; i++) { const double w = 6.283185307 * 300.0 * i / FS; re += sR[i] * cos (w); im += -sR[i] * sin (w); }
+				const double ph = atan2 (im, re);
+				if (!first)
+				{
+					double dp = ph - prevPh; while (dp > 3.14159265) dp -= 6.2831853; while (dp < -3.14159265) dp += 6.2831853;
+					const double df = fabs (dp) / 6.2831853 / ((W / 2) / (double) FS);
+					if (df > maxDf) maxDf = df;
+				}
+				prevPh = ph; first = false;
+			}
+			return maxDf;
+		};
+		const double dfNone = Wander (0.0f), dfDrift = Wander (20.0f);
+		CHECKM (dfNone < 0.5, "secondhand: pitch moves with no drift (%g Hz)", dfNone);
+		CHECKM (dfDrift > 1.0 && dfDrift < 9.0, "secondhand: drift 20 cents: maximum frequency deviation %g Hz", dfDrift);
+		// Hand | Hand: both outputs carry the signal and stay bounded
+		Defaults (type); SetP (type, "mode", 1.0f);
+		CFx *fx2 = FxCreate (type, FS);
+		std::vector<float> sL, sR;
+		RunSine (fx2, 300.0f, 0.3f, 96000, sL, sR, 1);
+		CHECKM (Rms (sL, 48000, 96000) > 0.1 && Rms (sR, 48000, 96000) > 0.1, "secondhand Hand | Hand: a hand is silent");
+		CHECK (Finite (sL, 2.0f) && Finite (sR, 2.0f));
+		delete fx2;
+	}	{	// ADELshifter Manual: a note with no saved setting uses the voice's semitones; with a saved setting for that pitch class the saved semitones are used
+		const unsigned type = FxShifterManual;
+		Defaults (type); SetP (type, "dry", -60.0f); SetP (type, "v1on", 1.0f); SetP (type, "v1semi", 12.0f); SetP (type, "v1level", 0.0f); SetP (type, "v1pan", 0.0f);
+		SetP (type, "v2on", 0.0f); SetP (type, "v3on", 0.0f); SetP (type, "glide", 5.0f);
+		CFx *fx = FxCreate (type, FS);
+		std::vector<float> L, R;
+		RunSine (fx, 110.0f, 0.3f, 96000, L, R, 1);
+		const double u220 = Tone (L, 220.0f, 48000, 96000), u165 = Tone (L, 164.81f, 48000, 96000);
+		CHECKM (u220 > 4.0 * u165, "shifter manual: unsaved note: %g at 220 Hz against %g at 164.8 Hz", u220, u165);
+		delete fx;
+		// the note A (pitch class 9): voice 1 +7 semitones (packed (7+24) + 49 (0+24) + 2401 (0+24))
+		SetP (type, "n9", (float) ((7 + 24) + 49 * 24 + 2401 * 24));
+		fx = FxCreate (type, FS);
+		RunSine (fx, 110.0f, 0.3f, 96000, L, R, 1);
+		const double s220 = Tone (L, 220.0f, 48000, 96000), s165 = Tone (L, 164.81f, 48000, 96000);
+		CHECKM (s165 > 4.0 * s220, "shifter manual: saved note: %g at 164.8 Hz against %g at 220 Hz", s165, s220);
+		delete fx;
+		// a saved setting of ANOTHER note does not affect this one
+		Defaults (type); SetP (type, "dry", -60.0f); SetP (type, "v1on", 1.0f); SetP (type, "v1semi", 12.0f); SetP (type, "v1level", 0.0f); SetP (type, "v1pan", 0.0f);
+		SetP (type, "v2on", 0.0f); SetP (type, "v3on", 0.0f); SetP (type, "glide", 5.0f);
+		SetP (type, "n4", (float) ((7 + 24) + 49 * 24 + 2401 * 24));
+		fx = FxCreate (type, FS);
+		RunSine (fx, 110.0f, 0.3f, 96000, L, R, 1);
+		CHECKM (Tone (L, 220.0f, 48000, 96000) > 4.0 * Tone (L, 164.81f, 48000, 96000), "shifter manual: a saved note affects another one");
+		delete fx;
+	}	{	// Fuzz/overdrive: with a large input the output is bounded; the Fuzz Face is asymmetric (a non-zero mean after the DC filter is not guaranteed): the shape is checked
 		unsigned types[3] = {FxTsDrive, FxMuff, FxFuzzFace};
 		for (int k = 0; k < 3; k++)
 		{

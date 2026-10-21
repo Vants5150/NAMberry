@@ -43,6 +43,9 @@ struct Params {
     float whammy = 0.f;
     bool whammyDry = false;
     float driftCents = 6.f;
+    // ADELshifter Manual: 12 entries (one per pitch class) with the semitones of the three voices saved for that note, packed as
+    // (s1 + 24) + 49 (s2 + 24) + 2401 (s3 + 24); a negative value = no entry (the voice's own semitones are used)
+    const float* noteMap = nullptr;
 };
 
 // ------------------------------------------------------------------------------------------
@@ -497,7 +500,15 @@ public:
                         lastSteps_[v] = q.steps;
                     }
                 } else {
-                    iv_[v] = int(std::lround(q.semi));
+                    int semi = int(std::lround(q.semi));
+                    if (p.noteMap && hasNote_) {
+                        const float e = p.noteMap[((nearest_ % 12) + 12) % 12];
+                        if (e >= 0.f) {
+                            const int code = int(e + 0.5f);
+                            semi = (v == 0 ? code % 49 : (v == 1 ? (code / 49) % 49 : code / 2401)) - 24;
+                        }
+                    }
+                    iv_[v] = semi;
                 }
             }
             float oL = 0.f, oR = 0.f;

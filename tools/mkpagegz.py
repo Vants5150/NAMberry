@@ -4,11 +4,11 @@ After decompression the page is identical to the one in control_page.h except fo
 and cannot be inside the compressed bytes:
   - in the head <script src=\"/t.js\"> is called (the board serves it uncompressed and it contains the boot code: window.NB_T=\"...\");
   - the line   const T=\"@@TOKEN@@\";   becomes   const T=window.NB_T;
-Usage: mkpagegz.py [--check]    (--check verifies that the compressed bytes decompress into the expected page and writes nothing)"""
+Usage: mkpagegz.py [source.h [output.h]] [--check]    (--check verifies that the compressed bytes decompress into the expected page and writes nothing)"""
 import gzip, re, sys, zlib
 
-SRC = "control_page.h"
-OUT = "control_page_gz.h"
+SRC = [a for a in sys.argv[1:] if not a.startswith("--")][0] if len([a for a in sys.argv[1:] if not a.startswith("--")]) > 0 else "control_page.h"
+OUT = [a for a in sys.argv[1:] if not a.startswith("--")][1] if len([a for a in sys.argv[1:] if not a.startswith("--")]) > 1 else "control_page_gz.h"
 t = open(SRC, encoding="utf-8").read()
 m = re.search(r'R"HTML\((.*)\)HTML"', t, re.S)
 if not m:

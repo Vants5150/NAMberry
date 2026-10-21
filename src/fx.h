@@ -38,6 +38,7 @@ CFx *NewAdelChorus (float fRate);	// 0 if the type does not exist
 CFx *NewCabIR (float fRate);
 CFx *NewAdelEqual (float fRate);
 CFx *NewAdelShifter (float fRate);
+CFx *NewShifterManual (float fRate);
 CFx *NewAdelDelayM (float fRate);
 CFx *NewAdelVerbM (float fRate);
 CFx *NewExtraFx (unsigned nType, float fRate);		// ToTest effects 28..47 (fx_extra.cpp)

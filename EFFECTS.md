@@ -643,6 +643,69 @@ Guitar equalizer: low and high cut, bass and treble shelves, three parametric ba
 | High Freq | 2000 to 12000 Hz | Frequency of the treble shelf. |
 | High Gain | -15 to 15 dB | Treble shelf: above the frequency the treble rises or falls. |
 
+### ADELshifter Manual
+
+A harmonizer whose three voices you build by ear and the block remembers for every note. Play a note, move each voice with the semitone arrows until it sounds right, press Save note: the three settings are stored for that note (all octaves), and a small button with the note name appears to select, change or delete it. A volume for each voice. Same pitch tracker as ADELshifter, Chromatic voices only.
+
+
+| Control | Range | What it does |
+|---|---|---|
+| Dry | -60 to 6 dB | Level of the direct guitar. |
+| Voices Level | -24 to 12 dB | Master level of the three voices. |
+| Glide | 1 to 400 ms | How fast a voice slides to its new interval when you play another note. |
+| Tracking | choice | Fast: it follows immediately; Smooth: more stable on dirty notes. |
+| Gate | -80 to -20 dB | Level under which the pitch is not tracked. |
+| Lowest note | 40 to 120 Hz | Lowest frequency the tracker looks for (77.8 Hz is the low E-flat of a guitar tuned a half step down). |
+| V1 On | 0 to 1 | Turns voice 1 on. |
+| V1 Semitones | -24 to 24 semitone | Semitones of voice 1 above (+) or below (-) the note you play, for the notes that have no saved setting. |
+| V1 Volume | -36 to 6 dB | Volume of voice 1. |
+| V1 Pan | -100 to 100 | Stereo position of voice 1. |
+| V2 On | 0 to 1 | Turns voice 2 on. |
+| V2 Semitones | -24 to 24 semitone | Semitones of voice 2 above (+) or below (-) the note you play, for the notes that have no saved setting. |
+| V2 Volume | -36 to 6 dB | Volume of voice 2. |
+| V2 Pan | -100 to 100 | Stereo position of voice 2. |
+| V3 On | 0 to 1 | Turns voice 3 on. |
+| V3 Semitones | -24 to 24 semitone | Semitones of voice 3 above (+) or below (-) the note you play, for the notes that have no saved setting. |
+| V3 Volume | -36 to 6 dB | Volume of voice 3. |
+| V3 Pan | -100 to 100 | Stereo position of voice 3. |
+| C | -1 to 117648 | Saved semitones of the three voices for the note C (packed number; -1 = none). Use the Notes section. |
+| C# | -1 to 117648 | Saved semitones of the three voices for the note C# (packed number; -1 = none). Use the Notes section. |
+| D | -1 to 117648 | Saved semitones of the three voices for the note D (packed number; -1 = none). Use the Notes section. |
+| D# | -1 to 117648 | Saved semitones of the three voices for the note D# (packed number; -1 = none). Use the Notes section. |
+| E | -1 to 117648 | Saved semitones of the three voices for the note E (packed number; -1 = none). Use the Notes section. |
+| F | -1 to 117648 | Saved semitones of the three voices for the note F (packed number; -1 = none). Use the Notes section. |
+| F# | -1 to 117648 | Saved semitones of the three voices for the note F# (packed number; -1 = none). Use the Notes section. |
+| G | -1 to 117648 | Saved semitones of the three voices for the note G (packed number; -1 = none). Use the Notes section. |
+| G# | -1 to 117648 | Saved semitones of the three voices for the note G# (packed number; -1 = none). Use the Notes section. |
+| A | -1 to 117648 | Saved semitones of the three voices for the note A (packed number; -1 = none). Use the Notes section. |
+| A# | -1 to 117648 | Saved semitones of the three voices for the note A# (packed number; -1 = none). Use the Notes section. |
+| B | -1 to 117648 | Saved semitones of the three voices for the note B (packed number; -1 = none). Use the Notes section. |
+| Pitch | 0 to 2000 Hz | Detected frequency. |
+| Note | 0 to 127 | Detected MIDI note (60 = middle C). |
+| Tracking OK | 0 to 1 | 1 when the pitch has been recognized. |
+
+### ADELSecondHand
+
+Simulates a second guitarist playing the same notes or chords like an overdub: timing, pitch wander, touch, tone and pick noise change from note to note. Two outputs: clean | hand, or hand 1 | hand 2, so that each can feed its own NAM (three NAMs from one block when the clean guitar is taken straight from the input). A fixed detune is not possible without pitch-synchronous processing; the pitch drifts sharp and flat instead.
+
+
+| Control | Range | What it does |
+|---|---|---|
+| Outputs | choice | Clean / Hand: the left output is the guitar as it is, the right one is the second guitarist (put a NAM on each). Hand / Hand: the left output is hand 1 and the right one hand 2; take the clean guitar straight from the input with an extra arrow (so you get three NAMs from one block). |
+| Hand level | -24 to 12 dB | Level of the second guitarist(s). |
+| Attack sensitivity | -70 to -30 dB | Level above which a rise of the signal counts as a new note: at every new note the hands choose a new timing, intensity and tone. |
+| Take | 0 to 99 | Which performance: every number gives a different series of small differences. |
+| Hand 1 offset | 0 to 60 ms | How late hand 1 plays on average (the clean guitar cannot be anticipated while you play). |
+| Hand 1 looseness | 0 to 40 ms | How much the timing of hand 1 changes from one note to the next (a random amount up to this many ms, early or late). |
+| Hand 2 offset | 0 to 60 ms | How late hand 2 plays on average (only with Hand / Hand). |
+| Hand 2 looseness | 0 to 40 ms | How much the timing of hand 2 changes from one note to the next (only with Hand / Hand). |
+| Pitch drift | 0 to 30 cent | Slow, irregular wandering of the pitch, sharp and flat around the original (sloppy bends, string and finger pressure). Different for each hand. |
+| Drift speed | 0.1 to 3 Hz | How fast the pitch wanders. |
+| Dynamics | 0 to 6 dB | How much louder or softer each note can be than the others (a different touch). |
+| Tone | -100 to 100 | Tilts the balance of the second guitarist's tone: dark on the left, bright on the right (another pickup, another pick). |
+| Tone variation | 0 to 100 % | How much the tone changes from one note to the next. |
+| Pick noise | 0 to 100 % | A short burst of pick and string noise at every new note. |
+
 ### ADELSendSweep
 
 Measurement source: plays a sweep, notes, chord or pink noise at the press of a button, optionally muting the output.

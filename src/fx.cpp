@@ -419,6 +419,8 @@ CFx *FxCreate (unsigned nType, float fRate)
 		return NewAdelEqual (fRate);
 	case FxAdelShifter:
 		return NewAdelShifter (fRate);
+	case FxShifterManual:
+		return NewShifterManual (fRate);
 	case FxAdelDelayM:
 		return NewAdelDelayM (fRate);
 	case FxAdelVerbM:

@@ -527,6 +527,150 @@ public:
 	void Process (float *pL, float *pR, unsigned n, int *pMono, const float *pP) { (void) pL; (void) pR; (void) n; (void) pMono; (void) pP; }
 };
 
+// ---- 85 SecondHand: a second guitarist made from the same signal (an overdub). A hand is the input delayed by a few ms, with a different timing, pitch wander, touch, tone and pick noise
+//      at every new note. The timing changes at the attack with a short crossfade between two delays (no pitch glide); the pitch wanders slowly and irregularly (modulated delay, sharp and flat
+//      around the original: a fixed detune would need processing synchronised to the pitch and is not done). Outputs: L = clean | R = hand 1, or L = hand 1 | R = hand 2. -----------------------
+class CSecondHand : public CBase
+{
+public:
+	CSecondHand (float r) : CBase (r)
+	{
+		m_in = new CLine (8192);
+		m_nTake = 0xFFFFFFFFu;
+		m_nHop = 0; m_nHold = 0; m_fE = 0.0f; m_fEP = 0.0f; m_bInit = false;
+		for (unsigned h = 0; h < 2; h++) Reset (h, 1u + h);
+	}
+	~CSecondHand (void) { delete m_in; }
+	unsigned Type (void) const { return FxSecondHand; }
+
+	void Process (float *pL, float *pR, unsigned n, int *pMono, const float *pP)
+	{
+		const unsigned nMode = pP[0] > 0.5f ? 1 : 0, nHands = nMode ? 2 : 1;
+		const float fLevel = DbToLin (Clampf (pP[1], -24.0f, 12.0f));
+		const float fThr = DbToLin (Clampf (pP[2], -70.0f, -30.0f));
+		const float fThr2 = fThr * fThr * 32.0f;
+		const unsigned nTake = (unsigned) Clampf (pP[3], 0.0f, 99.0f);
+		if (nTake != m_nTake)
+		{
+			m_nTake = nTake;
+			for (unsigned h = 0; h < 2; h++) Reset (h, 2654435761u * (nTake + 1u) + 40503u * (h + 1u));
+		}
+		const float fs = m_fRate;
+		const float off[2] = {Clampf (pP[4], 0.0f, 60.0f), Clampf (pP[6], 0.0f, 60.0f)};
+		const float loose[2] = {Clampf (pP[5], 0.0f, 40.0f), Clampf (pP[7], 0.0f, 40.0f)};
+		const float drift = Clampf (pP[8], 0.0f, 30.0f), drate = Clampf (pP[9], 0.1f, 3.0f);
+		const float dyn = Clampf (pP[10], 0.0f, 6.0f), tone = Clampf (pP[11], -100.0f, 100.0f), tvar = Clampf (pP[12], 0.0f, 100.0f), pick = Clampf (pP[13], 0.0f, 100.0f) * 0.01f;
+		const float guard = 0.001f * fs, xfStep = 1.0f / (0.008f * fs), aLp = LpA (1000.0f, fs);
+		float f1[2], f2[2], A1[2], A2[2];
+		for (unsigned h = 0; h < 2; h++)
+		{
+			f1[h] = drate * (h ? 1.31f : 1.0f);
+			f2[h] = f1[h] * 1.618f;
+			// peak pitch deviation (cents) = 10877 f A (A in seconds): the amplitude is limited to 20 ms of delay
+			A1[h] = Clampf (drift * 0.7f / (10877.0f * f1[h]), 0.0f, 0.020f) * fs;
+			A2[h] = Clampf (drift * 0.7f / (10877.0f * f2[h]), 0.0f, 0.020f) * fs;
+		}
+		if (!m_bInit)
+		{
+			m_bInit = true;
+			for (unsigned h = 0; h < 2; h++) { m_h[h].dNew = m_h[h].dOld = (off[h] + loose[h] * m_h[h].rD) * 0.001f * fs; }
+		}
+		// the targets that follow the knobs
+		for (unsigned h = 0; h < nHands; h++)
+		{
+			THand &H = m_h[h];
+			const float dT = Clampf (off[h] + loose[h] * H.rD, 0.3f, 95.0f) * 0.001f * fs;
+			if (H.xf >= 1.0f) H.dNew += 0.02f * (dT - H.dNew);
+			H.gainT = DbToLin (dyn * H.rG);
+			H.toneT = Clampf ((tone + tvar * H.rT) * 0.01f, -1.0f, 1.0f);
+		}
+		for (unsigned j = 0; j < n; j++)
+		{
+			const float x = *pMono ? pL[j] : 0.5f * (pL[j] + pR[j]);
+			m_in->Put (x);
+			m_fE += x * x;
+			if (++m_nHop >= 32)
+			{
+				m_nHop = 0;
+				if (m_nHold > 0) m_nHold--;
+				const float eP = m_fEP > fThr2 * 0.05f ? m_fEP : fThr2 * 0.05f;
+				if (m_fE > fThr2 && m_fE > 3.0f * eP && m_nHold == 0)
+				{
+					m_nHold = 45;
+					for (unsigned h = 0; h < nHands; h++)
+					{
+						THand &H = m_h[h];
+						H.rD = Rnd (H); H.rG = Rnd (H); H.rT = Rnd (H);
+						const float rn = Absf (Rnd (H));
+						H.dOld = H.dNew;
+						H.dNew = Clampf (off[h] + loose[h] * H.rD, 0.3f, 95.0f) * 0.001f * fs;
+						H.xf = 0.0f;
+						H.nEnv = 1.0f;
+						H.nAmp = pick * 0.4f * (0.5f + 0.5f * rn) * DspSqrtF (m_fE * (1.0f / 32.0f));
+						H.gainT = DbToLin (dyn * H.rG);
+						H.toneT = Clampf ((tone + tvar * H.rT) * 0.01f, -1.0f, 1.0f);
+					}
+				}
+				m_fEP = m_fE;
+				m_fE = 0.0f;
+			}
+			float out[2] = {x, x};
+			for (unsigned h = 0; h < nHands; h++)
+			{
+				THand &H = m_h[h];
+				if (H.xf < 1.0f) { H.xf += xfStep; if (H.xf > 1.0f) H.xf = 1.0f; }
+				H.ph1 = Wrap1 (H.ph1 + f1[h] / fs);
+				H.ph2 = Wrap1 (H.ph2 + f2[h] / fs);
+				const float ex = guard + A1[h] + A2[h] + A1[h] * Sin1 (H.ph1) + A2[h] * Sin1 (H.ph2);
+				const float acc = H.xf >= 1.0f ? m_in->Get (H.dNew + ex) : (1.0f - H.xf) * m_in->Get (H.dOld + ex) + H.xf * m_in->Get (H.dNew + ex);
+				H.gain += 0.0008f * (H.gainT - H.gain);
+				H.tone += 0.0008f * (H.toneT - H.tone);
+				H.lp += aLp * (acc - H.lp);
+				const float hp = acc - H.lp;
+				float y = H.lp * (1.0f - 0.5f * H.tone) + hp * (1.0f + 0.5f * H.tone);
+				if (H.nEnv > 1e-4f)
+				{
+					const float wn = Rnd (H);
+					y += H.nAmp * H.nEnv * 0.5f * (wn - H.nPrev);
+					H.nPrev = wn;
+					H.nEnv *= 0.9985f;
+				}
+				out[nMode ? h : 1] = y * H.gain * fLevel;
+			}
+			pL[j] = out[0];
+			pR[j] = out[1];
+		}
+		*pMono = 0;
+	}
+private:
+	struct THand
+	{
+		float dOld, dNew, xf, gain, gainT, tone, toneT, lp, ph1, ph2, nEnv, nAmp, nPrev, rD, rG, rT;
+		unsigned rng;
+	};
+	static float Rnd (THand &H)
+	{
+		H.rng ^= H.rng << 13; H.rng ^= H.rng >> 17; H.rng ^= H.rng << 5;
+		return (float) (int) H.rng * (1.0f / 2147483648.0f);
+	}
+	void Reset (unsigned h, unsigned nSeed)
+	{
+		THand &H = m_h[h];
+		H.rng = nSeed | 1u;
+		for (unsigned i = 0; i < 4; i++) Rnd (H);
+		H.rD = Rnd (H); H.rG = Rnd (H); H.rT = Rnd (H);
+		H.dOld = H.dNew = 0.0f;
+		H.xf = 1.0f; H.gain = 1.0f; H.gainT = 1.0f; H.tone = 0.0f; H.toneT = 0.0f; H.lp = 0.0f;
+		H.ph1 = Wrap1 (0.21f + 0.4f * (float) h); H.ph2 = Wrap1 (0.67f + 0.1f * (float) h);
+		H.nEnv = 0.0f; H.nAmp = 0.0f; H.nPrev = 0.0f;
+		m_bInit = false;
+	}
+	CLine *m_in;
+	THand m_h[2];
+	unsigned m_nTake, m_nHop, m_nHold;
+	float m_fE, m_fEP;
+	bool m_bInit;
+};
 }	// namespace
 
 CFx *NewExtraFx2 (unsigned nType, float fRate)
@@ -545,6 +689,7 @@ CFx *NewExtraFx2 (unsigned nType, float fRate)
 	case FxDuck:		return new CDuck (fRate);
 	case FxSustain:		return new CSustain (fRate);
 	case FxSelector:	return new CSelector (fRate);
+	case FxSecondHand:	return new CSecondHand (fRate);
 	default:		return 0;
 	}
 }

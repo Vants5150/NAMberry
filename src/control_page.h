@@ -161,6 +161,9 @@ body.lkdrag svg.nsv .nlab{pointer-events:none}
 .shman button.shar{width:48px;height:48px;font-size:22px;line-height:1;border-radius:10px}
 .shman .shval{min-width:13em;font-variant-numeric:tabular-nums}
 .shman .shnote{font-size:15px}
+.smchip{min-width:48px;font-weight:600}
+.smchip.on{background:var(--ac,#2a6fdb);color:#fff}
+.smchip.now{outline:2px solid #198754}
 .toastmini{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:80;background:#222;color:#fff;border-radius:10px;padding:10px 16px;font-size:13px;box-shadow:0 6px 20px rgba(0,0,0,.5);max-width:90vw}
 @keyframes trin{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
 .lpop{position:fixed;z-index:60;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:10px;box-shadow:0 8px 28px rgba(0,0,0,.4);display:flex;flex-direction:column;gap:8px;min-width:270px}
@@ -430,13 +433,13 @@ let FXD=[];
 const fxd=k=>FXD.find(d=>d.fx==k);
 const fxShort=d=>String(d.title).split(" (")[0];
 const nmOf=n=>n.t=="fx"?(fxd(n.fx)?fxShort(fxd(n.fx)):n.fx):(n.t=="vol"&&n.rt?"Routing":TNAME[n.t]);
-const addOpts=depth=>[["nam","NAM"],["vol","Volume"],["rout","Routing (routing only)"],["pan","Pan (stereo)"]].concat(FXD.filter(d=>!d.hid).map(d=>[d.fx,d.title]).sort((a,b)=>fxSortKey(a[1]).localeCompare(fxSortKey(b[1]),"en",{sensitivity:"base"})));
-/* effects in alphabetical order in the choice menus: the "ADEL" and "ToTest - " prefixes are ignored for the order (the text shown stays the same)*/
+const addOpts=depth=>[["nam","NAM"],["vol","Volume"],["rout","Routing (routing only)"],["pan","Pan (stereo)"]].concat(FXD.filter(d=>!d.hid).map(d=>[d.fx,d.title]).sort((a,b)=>(String(a[1]).indexOf("ToTest")==0)-(String(b[1]).indexOf("ToTest")==0)||fxSortKey(a[1]).localeCompare(fxSortKey(b[1]),"en",{sensitivity:"base"})));
+/* effects in alphabetical order in the choice menus, the ToTest ones at the end: the "ADEL" and "ToTest - " prefixes are ignored for the order (the text shown stays the same)*/
 function fxSortKey(t){return String(t).replace(/^ToTest - /,"").replace(/^ADEL\s*/i,"")}
 const fxMixIdx=n=>{const d=fxd(n.fx);return d?d.p.findIndex(p=>p.k=="mix"):-1};
 /* ToTest effects (fx_extra.cpp): they keep a mono input mono, except these four, which make the output stereo*/
 const XFX=["tsdrive","muff","fuzzface","tremolo","harmtrem","autowah","octaver","noisegate","univibe","flanger","rotary","tapeecho","booster","tonestack","swell","widener","vibrato","centaur","bluesdrv","ds1","ocd","guvnor","rangemaster","fz1","bender","fuzzfactory","phase90","smallstone","ce1","ce2","ad9","mflanger","dimension","autopan","slicer","crybaby","womantone","geq6","dynacomp","optocomp","limiter","analogdelay","duckdelay","sustainer","selector","tubescreamer","ratts","opticalla"];
-const fxStereoOut=n=>["adelverb","adeldelay","adelspring","adelchorus","adelshifter","rotary","widener","dimension","autopan"].includes(n.fx);
+const fxStereoOut=n=>["adelverb","adeldelay","adelspring","adelchorus","adelshifter","shiftermanual","secondhand","rotary","widener","dimension","autopan"].includes(n.fx);
 const GL={
   io_in:'<svg viewBox="0 0 24 24"><path d="M3 12h13M12 7l5 5-5 5M20 5v14"/></svg>',
   io_out:'<svg viewBox="0 0 24 24"><path d="M4 5v14M8 12h13M17 7l5 5-5 5" transform="translate(-2 0)"/></svg>',
@@ -466,6 +469,7 @@ GL.phase90=GL.smallstone=GL.phaser;GL.ce1=GL.ce2=GL.dimension=GL.vibrato;GL.auto
 GL.dynacomp=GL.limiter=GL.sustainer=GL.compressor;GL.analogdelay=GL.duckdelay=GL.ad9=GL.delay;GL.mflanger=GL.flanger;
 GL.selector=GL.rout;
 GL.adelshifter='<svg viewBox="0 0 24 24"><path d="M4 18h5l3-12 3 12h5"/><path d="M18 5l2 2-2 2" /></svg>';
+GL.shiftermanual=GL.adelshifter;GL.secondhand='<svg viewBox="0 0 24 24"><path d="M5 18v-6a2 2 0 014 0v6M5 14h4M15 18v-9a2 2 0 014 0v9M15 13h4"/></svg>';
 function locate(id){if(S.board.net){if(id<=-11)return {n:{id},arr:[],i:0,chain:"net",net:true,io:true};const c=S.board.net.cells.find(q=>q.b[0].id==id);return c?{arr:c.b,i:0,n:c.b[0],chain:"net",net:true}:null}return null}
 function lbl(n){
   if(n.t=="nam")return n.loaded?n.name:n.status;
@@ -927,83 +931,114 @@ async function mtick(){
   if(!document.hidden&&!idleNow()&&needM()){try{const fb=typeof sel=="number"?locate(sel):null;const r=await fetch("/m?_="+Date.now()+(fb&&fb.n.t=="fx"?"&b="+sel:""),{cache:"no-store"});const j=await r.json();mtApply(j);fxOut(j)}catch(e){ok=false}}
   setTimeout(mtick,ok?1000:2000);
 }
-/* ADELshifter "Manual" section: with Manual on, every voice has down/up arrows that move it by one semitone from the note being played now;
-   the voice is switched to Chromatic mode and the page shows the played note and the note the voice makes, so a harmony can be built by ear*/
-/* saves the current values of a block as a named setting (same list as the Saved settings menu); the values are re-read first so that a change made a moment ago is included*/
-async function bpSaveFlow(id){
-  try{await stNow()}catch(e){}
-  const l=locate(id);if(!l||!l.n)return;
-  const n=l.n;
-  const nm=prompt("Name for the settings of this block:","");
-  if(!nm||!nm.trim())return;
-  const name=nm.trim();
-  if((S.bp||[]).some(b=>b.n==name)&&!confirm("Replace the existing \u0027"+name+"\u0027: replace it?"))return;
-  const r=await api("/bp",{op:"save",n:name,d:bpData(n)});warn(r);
-  if(r.ok)await g({op:"bpset",id:n.id,s:name});
-}
+/* ADELshifter Manual: the three voices remember their semitones for every note. The page shows the note being played (the last one is kept), the semitones of each voice
+   (arrows, hold to repeat), a volume per voice, a "Save note" button that stores the three semitones for that note, and a small button for every saved note to select, change or delete it.
+   The 12 notes (pitch classes) are stored in the block as 12 numbers n0..n11 that pack the three voices' semitones: (s1+24)+49(s2+24)+2401(s3+24), -1 = none.*/
 const NOTE_NAMES=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
 const midiName=m=>NOTE_NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
-function shManual(n,d){
+const smPack=s=>(s[0]+24)+49*(s[1]+24)+2401*(s[2]+24);
+const smUnpack=c=>[c%49-24,Math.floor(c/49)%49-24,Math.floor(c/2401)-24];
+function smNotes(n,d){
   const ix=k=>d.p.findIndex(p=>p.k==k);
-  const det=el("details","fxg"),key="fxg_adelshifter_manual";
+  const kNote=ix("note"),kVoiced=ix("voiced"),kMap=[];for(let c=0;c<12;c++)kMap.push(ix("n"+c));
+  const det=el("details","fxg"),key="fxg_shiftermanual_notes";
   let open=true;try{const s=localStorage.getItem(key);if(s!==null)open=s=="1"}catch(e){}
   det.open=open;det.ontoggle=()=>{try{localStorage.setItem(key,det.open?"1":"0")}catch(e){}};
-  det.appendChild(el("summary","","Manual"));
+  det.appendChild(el("summary","","Notes"));
   const box=el("div","shman");det.appendChild(box);
-  let played=null;                       /* MIDI note being played now (rounded), null if the tracker does not hear a note*/
-  const voices=[],rows=el("div","shman");
-  const top=el("div","shtop");
-  top.appendChild(el("span","","Manual"));
-  const sw=switchEl(async v=>{
-    lsSet("nb_shman",v?"1":"0");rows.style.display=v?"":"none";
-    if(v){for(let i=1;i<=3;i++){await g({op:"set",id:n.id,k:"v"+i+"mode",v:1})}}
-  });
-  top.appendChild(sw);
-  const live=el("b","shnote","Play a note");top.appendChild(live);
-  top.appendChild(btn("Save settings...","Save the three voices as a named setting: it appears in Saved settings of this block",()=>bpSaveFlow(n.id)));
-  box.appendChild(top);
-  box.appendChild(el("div","info","With Manual on the three voices are in Chromatic mode. Play a note, listen to the voice and move it up or down one semitone at a time with the arrows (hold the arrow to repeat) until it sounds right; the interval and the note it makes are shown. Switch the voice on if it is off."));
-  box.appendChild(rows);
+  let last=null,chosen=null;                        /* last note heard (MIDI) and a saved note chosen with its button*/
+  const map=[],stamp=[];for(let c=0;c<12;c++){map.push(n.v&&n.v[kMap[c]]>=0?Math.round(n.v[kMap[c]]):-1);stamp.push(0)}
+  const dflt=[0,0,0],dAt=[0,0,0];for(let i=0;i<3;i++)dflt[i]=Math.round((n.v&&n.v[ix("v"+(i+1)+"semi")])||0);
+  const slot=()=>chosen!==null?chosen:(last===null?null:((last%12)+12)%12);
+  const semisNow=()=>{const s=slot();return s!==null&&map[s]>=0?smUnpack(map[s]):dflt.slice()};
+  const top=el("div","shtop"),live=el("b","shnote","Play a note");top.appendChild(live);box.appendChild(top);
+  box.appendChild(el("div","info","Play a note and listen to the voices. Move each voice up or down with the arrows (hold to repeat) until the harmony is right, then press Save note: the three settings are remembered for that note. Play the next note, adjust, save again. A button with the note name appears for every saved note: select it to change its setting or to delete it. Notes without a saved setting use the semitones shown while no saved note is selected; the volume and the stereo position (pan) of every voice are at the right of the arrows."));
+  const rows=el("div","shman");box.appendChild(rows);
+  const vals=[],onS=[],sliders=[],pans=[];
   const refresh=()=>{
-    live.textContent=played===null?"Play a note":"Playing: "+midiName(played);
-    voices.forEach(vc=>{
-      const s=Math.round(vc.semi);
-      vc.val.textContent=(s>0?"+":"")+s+" semitones"+(played===null?"":"  →  "+midiName(played+s));
-    });
+    const s=slot(),sv=semisNow(),saved=s!==null&&map[s]>=0;
+    live.textContent=(last===null?"Play a note":(chosen!==null?"Editing: ":"Playing: ")+(chosen!==null?NOTE_NAMES[chosen]:midiName(last)))+(saved?"  (saved)":"");
+    for(let i=0;i<3;i++){
+      const v=sv[i];
+      vals[i].textContent=(v>0?"+":"")+v+" semitones"+(last===null?"":"  →  "+midiName(last+v));
+    }
+    saveB.textContent="Save note"+(s!==null?" "+NOTE_NAMES[s]:"");
+    saveB.disabled=s===null;
+    chips.innerHTML="";
+    for(let c=0;c<12;c++){
+      if(map[c]<0)continue;
+      const b=el("button","mini smchip"+(chosen===c?" on":"")+((last!==null&&((last%12)+12)%12===c&&chosen===null)?" now":""),NOTE_NAMES[c]);b.type="button";
+      b.title="Saved setting of "+NOTE_NAMES[c]+": "+smUnpack(map[c]).map(x=>(x>0?"+":"")+x).join(", ")+" semitones. Click to select it.";
+      b.onclick=()=>{chosen=chosen===c?null:c;refresh()};
+      chips.appendChild(b);
+    }
+    delB.style.display=chosen!==null?"":"none";
   };
-  for(let i=1;i<=3;i++){
-    const kOn=ix("v"+i+"on"),kSemi=ix("v"+i+"semi");
-    const vc={semi:(n.v&&n.v[kSemi])||0,at:0};
-    const row=el("div","shrow");
-    row.appendChild(el("span","vn","Voice "+i));
-    const onSw=switchEl(v=>g({op:"set",id:n.id,k:"v"+i+"on",v}));row.appendChild(onSw);
-    const dn=el("button","mini shar","▼"),up=el("button","mini shar","▲");dn.type=up.type="button";
-    dn.title="One semitone down";up.title="One semitone up";
-    vc.val=el("b","shval","");
-    const step=async dlt=>{
-      const nv=Math.max(-24,Math.min(24,Math.round(vc.semi)+dlt));
-      if(nv==Math.round(vc.semi))return;
-      vc.semi=nv;vc.at=Date.now();refresh();
-      await g({op:"set",id:n.id,k:"v"+i+"mode",v:1});
-      await g({op:"set",id:n.id,k:"v"+i+"on",v:1});onSw.sync(1);
-      await g({op:"set",id:n.id,k:"v"+i+"semi",v:nv});
-    };
-    const hold=(b,dlt)=>{
-      let t1=0,t2=0;
-      const stop=()=>{clearTimeout(t1);clearInterval(t2);t1=t2=0};
-      b.addEventListener("pointerdown",e=>{e.preventDefault();step(dlt);t1=setTimeout(()=>{t2=setInterval(()=>step(dlt),150)},450)});
-      ["pointerup","pointerleave","pointercancel"].forEach(ev=>b.addEventListener(ev,stop));
-    };
-    hold(dn,-1);hold(up,1);
-    row.appendChild(dn);row.appendChild(vc.val);row.appendChild(up);
+  const step=async(i,dlt)=>{
+    const s=slot(),sv=semisNow();
+    const nv=Math.max(-24,Math.min(24,sv[i]+dlt));
+    if(nv==sv[i])return;
+    sv[i]=nv;
+    if(s!==null&&map[s]>=0){map[s]=smPack(sv);stamp[s]=Date.now();refresh();await g({op:"set",id:n.id,k:"n"+s,v:map[s]})}
+    else{dflt[i]=nv;dAt[i]=Date.now();refresh();await g({op:"set",id:n.id,k:"v"+(i+1)+"semi",v:nv});await g({op:"set",id:n.id,k:"v"+(i+1)+"on",v:1});onS[i].sync(1)}
+  };
+  const hold=(b,i,dlt)=>{
+    let t1=0,t2=0;
+    const stop=()=>{clearTimeout(t1);clearInterval(t2);t1=t2=0};
+    b.addEventListener("pointerdown",e=>{e.preventDefault();step(i,dlt);t1=setTimeout(()=>{t2=setInterval(()=>step(i,dlt),150)},450)});
+    ["pointerup","pointerleave","pointercancel"].forEach(ev=>b.addEventListener(ev,stop));
+  };
+  for(let i=0;i<3;i++){
+    const kOn=ix("v"+(i+1)+"on"),kLv=ix("v"+(i+1)+"level");
+    const row=el("div","shrow");row.appendChild(el("span","vn","Voice "+(i+1)));
+    const sw=switchEl(v=>g({op:"set",id:n.id,k:"v"+(i+1)+"on",v}));row.appendChild(sw);onS.push(sw);
+    const dn=el("button","mini shar","▼"),up=el("button","mini shar","▲");dn.type=up.type="button";dn.title="One semitone down";up.title="One semitone up";
+    hold(dn,i,-1);hold(up,i,1);
+    const v=el("b","shval","");vals.push(v);
+    row.appendChild(dn);row.appendChild(v);row.appendChild(up);
+    const lab=el("span","info","Volume");row.appendChild(lab);
+    const sl=document.createElement("input");sl.type="range";sl.min="-36";sl.max="6";sl.step="0.5";sl.value=String((n.v&&n.v[kLv])!==undefined?n.v[kLv]:-3);sl.style.width="9em";
+    const vt=el("span","info","");const showV=()=>{vt.textContent=(+sl.value>0?"+":"")+sl.value+" dB"};showV();
+    let tm=0,lastSet=0;
+    sl.oninput=()=>{showV();sliders[i].at=Date.now();clearTimeout(tm);tm=setTimeout(()=>g({op:"set",id:n.id,k:"v"+(i+1)+"level",v:+sl.value}),120)};
+    row.appendChild(sl);row.appendChild(vt);sliders.push({sl,showV,at:0});
+    const kPan=ix("v"+(i+1)+"pan");
+    row.appendChild(el("span","info","Pan"));
+    const pn=document.createElement("input");pn.type="range";pn.min="-100";pn.max="100";pn.step="1";pn.value=String((n.v&&n.v[kPan])!==undefined?n.v[kPan]:0);pn.style.width="7em";pn.title="Stereo position of the voice: left, centre, right";
+    const pt=el("span","info","");const showP=()=>{const v=+pn.value;pt.textContent=v==0?"C":(v<0?"L":"R")+Math.abs(v)};showP();
+    let tp=0;pans.push({pn,showP,at:0});
+    pn.oninput=()=>{showP();pans[i].at=Date.now();clearTimeout(tp);tp=setTimeout(()=>g({op:"set",id:n.id,k:"v"+(i+1)+"pan",v:+pn.value}),120)};
+    row.appendChild(pn);row.appendChild(pt);
     rows.appendChild(row);
-    voices.push(vc);
-    addBind(n.id,nn=>{onSw.sync(nn.v[kOn]);if(Date.now()-vc.at>4000){vc.semi=nn.v[kSemi];refresh()}});
+    addBind(n.id,nn=>{
+      sw.sync(nn.v[kOn]);
+      if(Date.now()-sliders[i].at>4000){sl.value=String(nn.v[kLv]);showV()}
+      if(Date.now()-pans[i].at>4000){pn.value=String(nn.v[kPan]);showP()}
+      if(Date.now()-dAt[i]>4000){dflt[i]=Math.round(nn.v[ix("v"+(i+1)+"semi")]);}
+      refresh();
+    });
   }
-  const man=lsGet("nb_shman","0")=="1";
-  sw.sync(man?1:0);rows.style.display=man?"":"none";
-  const kNote=ix("note"),kVoiced=ix("voiced");
-  if(kNote>=0)FXO.push({k:kNote,p:d.p[kNote],val:live,fn:(v,f)=>{played=(kVoiced>=0&&f[kVoiced]>0.5&&v>0)?Math.round(v):null;refresh()}});
+  const bar=el("div","shtop");
+  const saveB=el("button","mini","Save note");saveB.type="button";
+  saveB.title="Remember the three voices' semitones for this note";
+  saveB.onclick=async()=>{
+    const s=slot();if(s===null)return;
+    map[s]=smPack(semisNow());stamp[s]=Date.now();chosen=null;refresh();
+    await g({op:"set",id:n.id,k:"n"+s,v:map[s]});
+  };
+  const delB=el("button","mini","Delete this note");delB.type="button";delB.style.display="none";
+  delB.title="Forget the saved setting of the selected note";
+  delB.onclick=async()=>{
+    if(chosen===null)return;
+    const s=chosen;map[s]=-1;stamp[s]=Date.now();chosen=null;refresh();
+    await g({op:"set",id:n.id,k:"n"+s,v:-1});
+  };
+  bar.appendChild(saveB);bar.appendChild(delB);box.appendChild(bar);
+  const chips=el("div","shtop");box.appendChild(chips);
+  addBind(n.id,nn=>{for(let c=0;c<12;c++){if(Date.now()-stamp[c]>4000)map[c]=nn.v[kMap[c]]>=0?Math.round(nn.v[kMap[c]]):-1}refresh()});
+  if(kNote>=0)FXO.push({k:kNote,p:d.p[kNote],val:live,fn:(v,f)=>{
+    if(kVoiced>=0&&f[kVoiced]>0.5&&v>0){const m=Math.round(v);if(last===null||((m%12)+12)%12!==((last%12)+12)%12)chosen=null;last=m;refresh()}
+  }});
   refresh();
   return det;
 }/* effect panel: one box per group as in PiPedal's plugins; knobs (also logarithmic), menus, switches and measured values*/
@@ -1016,7 +1051,9 @@ function fxEditor(c,n){
   if(n.fx=="cabir")cabPanel(c,n);
   if(n.fx=="adelphase")c.appendChild(swLamp("Probe playing"));
   const groups=d.g&&d.g.length?d.g:[d.title];
+  if(n.fx=="shiftermanual")c.appendChild(smNotes(n,d));
   groups.forEach((gname,gi)=>{
+    if(n.fx=="shiftermanual"&&gname=="Note map")return;		/* the saved notes are shown by the Notes section*/
     const ps=d.p.map((p,k)=>[p,k]).filter(([p])=>(p.gr||0)==gi);
     if(!ps.length)return;
     const det=el("details","fxg"),key="fxg_"+d.fx+"_"+gi;
@@ -1057,7 +1094,6 @@ function fxEditor(c,n){
       }
     });
     c.appendChild(det);
-    if(n.fx=="adelshifter"&&gi==0)c.appendChild(shManual(n,d));
   });
 }
 function fxOut(j){

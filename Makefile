@@ -31,13 +31,19 @@ LIBS	= $(CIRCLEHOME)/addon/tftpfileserver/libtftpfileserver.a \
 # the linker discards never-used functions (--gc-sections): same generated code, less space (needed to keep the margin below 0x280000)
 GC_SECTIONS = 1
 
+# the sources live in src/ (make finds them with vpath; the objects are built in this directory)
+vpath %.cpp src
+vpath %.c src
+vpath %.S src
+vpath %.h src
+
 include $(CIRCLEHOME)/Rules.mk
 
 # the web server is not in the audio path: optimized for size (the last -O wins)
 control.o: CPPFLAGS += -Os
 
 # ADEL engines (standard C++ without libstdc++): compatibility headers in fxshim/, engine sources in adel/
-CPPFLAGS += -I fxshim -I adel -fno-threadsafe-statics
+CPPFLAGS += -I src -I src/fxshim -I src/adel -I . -fno-threadsafe-statics
 
 -include $(DEPS)
 
@@ -47,6 +53,6 @@ SMALLOBJS = control.o board.o kernel.o ota.o fx_extra2.o
 $(SMALLOBJS): OPTIMIZE = -Os
 
 # web page compressed with gzip at build time: control_page_gz.h is generated from control_page.h (the source page stays control_page.h)
-control_page_gz.h: control_page.h mkpagegz.py
-	python3 mkpagegz.py
+control_page_gz.h: src/control_page.h tools/mkpagegz.py
+	python3 tools/mkpagegz.py src/control_page.h control_page_gz.h
 control.o: control_page_gz.h

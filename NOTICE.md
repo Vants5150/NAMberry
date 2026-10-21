@@ -14,7 +14,7 @@ The firmware is built on top of the Circle bare-metal environment, which is GPL-
 
 ## Source files copied from Circle
 
-* `oscillator.cpp` / `oscillator.h`: unchanged copies of the files in Circle's `sample/34-sounddevices` (MiniSynth Pi, Copyright (C) 2017 R. Stange, GPL-3.0 or later), used for the test tones.
+* `oscillator.cpp`, `oscillator.h` and `synthmodule.h`: unchanged copies of the files in Circle's `sample/34-sounddevices` (MiniSynth Pi, Copyright (C) 2017 R. Stange, GPL-3.0 or later), used for the test tones.
 * `circle-patches/circle-namberry.patch`: the modifications made to Circle (against commit `7a81e1b480fe7d19fc1fc695b89bff0a0848f44b`), under Circle's own license (GPL-3.0; the patched add-on files keep their original headers).
 
 ## Not distributed in this repository

@@ -186,6 +186,7 @@ static unsigned CostAt1500 (u8 nType)
 	case FxCabIR:		return 30;
 	case FxAdelSpring:	return 40;
 	case FxAdelShifter:	return 50;
+	case FxShifterManual:	return 50;
 	case FxAdelEqual:	return 5;
 	case FxAdelSweep:	return 10;
 	// ToTest effects (28..77): measured on the board on 2026-10-14 (extra CPU on a 4-frame block at 48 kHz), estimate = 2 x measurement with a minimum of 0.5%
@@ -235,6 +236,7 @@ static unsigned CostAt1500 (u8 nType)
 	case FxAd9:		return 33;		// Analog Delay AD9 Real (fx_ad9.cpp): 0.33 us per sample on the host (4 linear circuits and the BBD), same scale as the others; not measured on the board
 	case FxMicroFlanger:	return 88;		// Flanger Micro Real (fx_mflanger.cpp): 0.88 us per sample on the host (three diodes in the input netlist plus two linear ones), same scale as the others; not measured on the board
 	case FxCe2:		return 27;		// Chorus CE-2 Real (fx_ce2.cpp): 0.27 us per sample and channel on the host (two linear circuits plus the delay line), same scale as the others; not measured on the board
+	case FxSecondHand:	return 14;		// two hands: delay taps, filters and the attack detector, estimated (not measured)
 	case FxOpticalLA:	return 12;		// 0.2 us per 4-sample mono block (0.4 stereo) on the Pi 5 (host test), same scale as the others (tsdrive 0.32 us = 8); not measured on the board
 	default:		return 10;
 	}
@@ -290,6 +292,7 @@ unsigned CBoard::MidiClassOfType (u8 nType)
 	case FxWoman:
 	case FxToneStack:	return McEq;
 	case FxAdelShifter:
+	case FxShifterManual:
 	case FxOctaver:		return McPitch;
 	case FxAdelChorus:
 	case FxPhaser:
@@ -303,6 +306,7 @@ unsigned CBoard::MidiClassOfType (u8 nType)
 	case FxDimD:
 	case FxCe2:
 	case FxMicroFlanger:
+	case FxSecondHand:
 	case FxAutoPan:		return McModPre;
 	default:		return 0;
 	}
