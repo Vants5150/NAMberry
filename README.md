@@ -76,7 +76,7 @@ On the running board with a test preset (one NAM, eleven other blocks, four core
 
 * A 6 x 12 grid. Drag from a block's output port to another block's input port to draw an arrow; the level on every arrow can be changed (in dB) and arrows can run diagonally. Series, parallel branches, splits and mixes are all just arrows. There are two inputs and two outputs.
 * Press and hold a block for about 0.6 s and a trash button appears over it; tap it to remove the block.
-* Every block has its own panel with the controls grouped in sections and a "Saved settings" menu for block presets (11 are included: Tube Screamer settings from five famous players, two Big Muff settings, a Klon setting and the Fuzz Face manufacturer's starting point, each with its source in `presets_fonti.txt`; for the other pedals no citable settings were found, so none were made up).
+* Every block has its own panel with the controls grouped in sections and a "Saved settings" menu for block presets (the author's board holds 45, installed with `tools/block_presets.py`: Tube Screamer settings from five famous players, two Big Muff settings, a Klon setting, the Fuzz Face manufacturer's starting point, the four example settings of the ZVEX Fuzz Factory manual and others taken from articles and forum posts; the rest are marked `(typical)` and are starting points built on how the controls are described, not documented settings of a player. Every source and every assumption is in `presets_fonti.txt`).
 
 ![A delay block panel with all its sections open](docs/img/delay_panel.png)
 

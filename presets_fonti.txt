@@ -25,3 +25,27 @@ ADELCentaurReal (Klon) - Guitar World, "John Mayer signs fan's Klon Centaur onst
 ADELFuzzFaceReal - Dunlop JHF1 / FFM6 / JHF3 manuals (Fuzz Face): "Start with both controls at 12 o'clock."
   https://statics.qloud.ar/casa-libertella-03-2020/72100-jhf1.pdf
   Dunlop manual 12h-12h   Fuzz 12:00 (5)  Volume 12:00 (5)  (the manufacturer's starting point, not Hendrix's settings)
+
+== Added 2026-10-21 (34 more block presets; the board now holds 45 of 48 available slots) ==
+Basis of each group. "(typical)" means the values are MY choice, built on how the controls are described in the sources, NOT a documented setting of a player.
+Clock conversion used: 7:00 = 0, 12:00 = 5, 5:00 = 10 (one hour = one unit).
+
+ADELFuzzFactoryReal - ZVEX Fuzz Factory manual (25th Anniversary Vexter, "Example settings", all with Vol 10:00): https://www.zvex.com/s/FuzzFactory2020Instructions.pdf  (text checked by extracting the PDF)
+  Hi compression fuzz (ZVEX)   Gate 3:00, Comp 9:00, Drive 5:00, Stab 5:00
+  Velcro fuzz (ZVEX)           Gate 7:00, Comp 5:00, Drive 5:00, Stab 2:00
+  Hi octave fuzz (ZVEX)        "Cleanish hi octave intermodulation": Gate 2-3:00 (7.5 used), Comp 7:00, Drive 7:00, Stab 5:00
+  Smooth fuzz (ZVEX)           Gate 7:00, Comp 3:00, Drive 5:00, Stab 5:00
+  (The manual's "Radio fuzz" has Stab to be tuned by ear while playing: not made into a preset.)
+ADELRatReal - Guitar Chalk, "Best Pro Co Rat 2 Settings", Blur "Song 2": Distortion 10, Filter 6-7, Volume 5-6 (6.5 and 5.5 used). The site says these are its own settings for that sound, not the band's.
+  https://www.guitarchalk.com/pro-co-rat-2-settings/
+ADELOCDReal - MusicRadar, "The FX files: Fulltone OCD", as reported by a web-search summary (the article body could not be fetched): rhythm Volume 10:00, Drive 2, Tone 2 (LP); lead Volume 11:00, Drive 10, Tone 1 (HP). The block's Switch is R13 in/out, not the real HP/LP switch, so it is left at its default.
+  https://www.musicradar.com/how-to/the-fx-files-fulltone-ocd
+ADELOctaverReal - forum posts: TalkBass "Boss OC-2 Settings?" (https://www.talkbass.com/threads/boss-oc-2-settings.179732/): both octave knobs about 10 o'clock for bass (a poster says it is in the Boss manual, not confirmed); Direct 3/4, Oct 1 1/2, Oct 2 off with a 15" cabinet; Direct 3/4, Oct 1 1/3, Oct 2 off with two 15" cabinets.
+ADELFuzzFaceReal - "Purple Haze style (forum)": Fuzz 9, Volume 6, from a generic forum suggestion (Fuzz 8-10, Volume 5-7), not documented Hendrix settings. https://jazzguitar.be/forum/guitar-amps-gizmos/103236-fender-tonemasterpro-hendrix-set-up.html
+ADELToneBenderReal - "Gentle (Toe Bender review)": Level 10:00, Attack minimum, a reviewer's favourite on a modern clone (premierguitar.com review of the Toe Bender MkII). "Full fuzz (typical)" is mine.
+ADELFlanger117Real - MXR M117R manual: start with all controls at 12:00; Width at zero stops the sweep and the Manual knob alone places the effect. Both presets use that (other knobs at 12:00).
+ADELOpticalLAReal - UA LA-2A tips and MusicRadar producer's guide: Peak Reduction around 40-60 % for vocals, watch a few dB of reduction; bass with lower reduction and Gain about 40 % (+2.4 dB used). The percentages are the sources', the dB conversion is mine.
+ADELDynaCompReal - "Country (Deluxe review)": a German review of the Dyna Comp DELUXE (not the original) gives Output 2:00, Sensitivity 2:00 for a country lick (the Deluxe has extra controls).
+ADELGuvnorReal / ADELToneStackReal - Guitar Chalk, "Are You Gonna Go My Way" (Lenny Kravitz): Bass 5, Middle 6, Treble 7 on a Marshall Super Lead AMP. Used as an EQ voicing for the Guv'nor (Gain 6, Level 5 are mine) and for the tone stack (JTM45 values).
+(typical) presets, based only on how the controls are described: DS-1 "Aggressive" (more aggressive as Level goes down and Dist up, Gearank), Phase 90 slow and fast (slow = gradual sweep, fast = rotary-like), CE-2 "Depth up" (Equipboard note "Depth up"), Rangemaster "Full boost", Uni-Vibe chorus and vibrato, Dimension D modes 1 and 3+4 (mode 1 widest, 3+4 tight, from the SDD-320 service note figures), AD9 slapback and ambient (short time, low repeat / long time, higher repeat), Cry Baby "Cocked wah", Micro Flanger "Slow jet", Klon "Low gain boost".
+Not found anywhere: documented knob settings of famous players for the Rangemaster, Tone Bender MkII, DS-1, Guv'nor, Phase 90, Uni-Vibe, CE-2, Dimension D, AD9, Cry Baby and M117 (searches 2026-10-21). Several articles only say who used the pedal, not how it was set.
