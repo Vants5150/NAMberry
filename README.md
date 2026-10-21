@@ -15,6 +15,12 @@ A bare-metal guitar multi-effects processor for the **Raspberry Pi 5** with a **
 * **Updates over Wi-Fi** (signed with an HMAC key stored on the SD card, `ota.key`), a **fallback WPA2 access point** when the home network is missing, and a **concert mode** that boots without any network.
 * **DI recorder**: records the raw input (24-bit stereo) into memory and downloads it as a WAV file from the page.
 
+## Screenshots
+
+![The pedalboard grid in the web page](docs/img/pedalboard.png)
+
+*The web page served by the board: a test preset with a NAM capture, compressor, noise gate, flanger, two choruses, delays, reverb, spring and tone stack, linked with series, parallel and stereo routes.*
+
 ## Hardware
 
 * Raspberry Pi 5
