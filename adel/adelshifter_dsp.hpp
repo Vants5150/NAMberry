@@ -1,5 +1,6 @@
 // ADELshifter: 3-voice harmonizer for monophonic guitar.
 //  - pitch detection with YIN (de Cheveigne & Kawahara 2002) on a decimated signal, with confirmation and memory
+//    (2026-10: attack detector that limits the window to the new note, continuity of the sounding note, more agreeing hops for octave leaps)
 //  - time-domain pitch shifting with splices synchronized to the period (PSOLA/"splicing" style):
 //    the read point runs at rate rho and, when the delay leaves the interval, jumps by a whole number
 //    of periods with a short fade. This way the waveform stays coherent and the latency is 1-3 periods.
@@ -73,6 +74,10 @@ public:
         confirm_ = 0;
         rms_ = 0.f;
         conf_ = 0.f;
+        hopsSinceOnset_ = 1000;
+        onsetNd_ = 0;
+        ageD_ = 100000;
+        wc_ = W;
     }
 
     // called at every sample; returns true when an analysis has been done (every 256 samples)
@@ -113,9 +118,37 @@ private:
             e += v * v;
         }
         rms_ = std::sqrt(e / 256.f);
+        // attack detector: energy of the last hop against the one before it (a picked note rises by several dB in a few ms)
+        float eL = 0.f, eP = 0.f, hL = 0.f, hP = 0.f;
+        for (int j = 0; j < HOP; ++j) {
+            float a = ring_[(nd_ - 1 - j) & 2047], b = ring_[(nd_ - 1 - HOP - j) & 2047];
+            float a1 = ring_[(nd_ - 2 - j) & 2047], b1 = ring_[(nd_ - 2 - HOP - j) & 2047];
+            eL += a * a;
+            eP += b * b;
+            hL += (a - a1) * (a - a1);      // high-frequency part: the pick noise of a new note
+            hP += (b - b1) * (b - b1);
+        }
+        if (hopsSinceOnset_ < 1000) ++hopsSinceOnset_;
+        if (eL > gateLin * gateLin * float(HOP) * 2.25f && (eL > 2.5f * eP || hL > 3.5f * hP) && hopsSinceOnset_ >= 3) {
+            hopsSinceOnset_ = 0;
+            onsetNd_ = nd_ - uint32_t(HOP) - 6u;
+        }
+        ageD_ = hopsSinceOnset_ < 24 ? int(nd_ - onsetNd_) : 100000;
         const float thr = tracking == 0 ? 0.18f : (tracking == 1 ? 0.15f : 0.12f);
         const float alpha = tracking == 0 ? 0.6f : (tracking == 1 ? 0.4f : 0.25f);
-        thr_ = thr; alpha_ = alpha; tauMax_ = tauMax; tauMin_ = tauMin; fsd_ = fsd; nds_ = nd_;
+        thr_ = thr; alpha_ = alpha; tracking_ = tracking; tauMax_ = tauMax; tauMin_ = tauMin; fsd_ = fsd; nds_ = nd_;
+        // right after an attack only the samples of the new note may be used: window and lags are limited by its age
+        wc_ = W;
+        if (ageD_ < W + tauMax) {
+            const int tm = std::min(tauMax, ageD_ / 2);
+            if (tm < tauMin + 6) {
+                // not enough of the new note yet: keep the previous state
+                conf_ = 0.f;
+                return true;
+            }
+            tauMax_ = tm;
+            wc_ = std::min(W, ageD_ - tm);
+        }
         conf_ = 0.f;
         if (rms_ >= gateLin && nd_ > uint32_t(W + MAXTAU + 8)) {
             busy_ = true;
@@ -131,17 +164,27 @@ private:
         const int tauMax = tauMax_;
         for (int k = 0; k < 12 && tau_ <= tauMax; ++k, ++tau_) {
             float s = 0.f;
-            for (int j = 0; j < W; ++j) {
+            for (int j = 0; j < wc_; ++j) {
                 float a = ring_[(nds_ - 1 - j) & 2047], b = ring_[(nds_ - 1 - j - tau_) & 2047];
                 float df = a - b;
                 s += df * df;
             }
-            d_[tau_] = s;
+            d_[tau_] = s * (float(W) / float(wc_));
         }
         if (tau_ <= tauMax) return false;
         busy_ = false;
         finish(true);
         return true;
+    }
+
+    // refines a lag with a parabola on the normalised difference function
+    float refine(const float* dn, int best, int tauMax) const {
+        if (best <= 1 || best >= tauMax) return float(best);
+        float s0 = dn[best - 1], s1 = dn[best], s2 = dn[best + 1];
+        float den = 2.f * (s0 - 2.f * s1 + s2);
+        float shift = std::fabs(den) > 1e-9f ? (s0 - s2) / den : 0.f;
+        shift = std::max(-0.5f, std::min(0.5f, shift));
+        return float(best) + shift;
     }
 
     void finish(bool computed) {
@@ -152,6 +195,9 @@ private:
         (void) d;
         bool found = false;
         float cand = 0.f;
+        auto semis = [](float a, float b) { return 12.f * std::log2(a / b); };
+        const bool recentOnset = hopsSinceOnset_ < 10;      // a new note started in the last 53 ms
+        float heldM = 1.f;                                  // how well the period of the note that was sounding still fits
         if (computed) {
             dn[0] = 1.f;
             float run = 0.f;
@@ -174,18 +220,34 @@ private:
                 if (m > 0.30f) best = -1;
             }
             if (best > 1 && best < tauMax) {
-                float s0 = dn[best - 1], s1 = dn[best], s2 = dn[best + 1];
-                float den = 2.f * (s0 - 2.f * s1 + s2);
-                float shift = std::fabs(den) > 1e-9f ? (s0 - s2) / den : 0.f;
-                shift = std::max(-0.5f, std::min(0.5f, shift));
-                float tauF = float(best) + shift;
-                conf_ = 1.f - s1;
-                if (conf_ >= 0.72f) {
+                const float tauF = refine(dn, best, tauMax);
+                conf_ = 1.f - dn[best];
+                // right after an attack only a few periods of the new note are available: ask for a clearer minimum
+                const float need = ageD_ < W + tauMax ? 0.78f : 0.72f;
+                if (conf_ >= need) {
                     cand = fsd / tauF;
                     found = true;
                 }
             }
+            // continuity: a note that is already sounding keeps its pitch while its own period still fits, so an octave
+            // error (the half period looks almost as good) or a noisy hop does not move it; right after an attack this is disabled
+            if (voiced_ && hz_ > 0.f && !recentOnset_) {
+                const float tp = fsd / hz_;
+                int lo = std::max(tauMin, int(tp * 0.96f)), hi = std::min(tauMax - 1, int(tp * 1.04f) + 1);
+                int bi = -1;
+                float m = 1e9f;
+                for (int tau = lo; tau <= hi; ++tau)
+                    if (dn[tau] < m) { m = dn[tau]; bi = tau; }
+                heldM = m;
+                const float contThr = std::max(0.28f, thr * 1.8f);
+                if (bi > 1 && bi < tauMax - 1 && m < contThr && (!found || std::fabs(semis(cand, hz_)) >= 0.9f)) {
+                    cand = fsd / refine(dn, bi, tauMax);
+                    found = true;
+                    conf_ = 1.f - m;
+                }
+            }
         }
+        recentOnset_ = recentOnset;
         if (!found) {
             ++unvoicedHops_;
             hasPending_ = false;
@@ -194,7 +256,6 @@ private:
             return;
         }
         unvoicedHops_ = 0;
-        auto semis = [](float a, float b) { return 12.f * std::log2(a / b); };
         if (!voiced_) {
             if (hasPending_ && std::fabs(semis(cand, pendingHz_)) < 0.8f) {
                 voiced_ = true;
@@ -207,15 +268,22 @@ private:
             return;
         }
         float dfs = semis(cand, hz_);
-        if (std::fabs(dfs) < 0.9f) {
+        if (std::fabs(dfs) < 0.3f) {
             hz_ += alpha * (cand - hz_);
             hasPending_ = false;
             confirm_ = 0;
         } else {
-            // jump: either a new note (2 confirmations) or an octave error (3 confirmations)
-            const bool oct = std::fabs(std::fabs(dfs) - 12.f) < 1.0f;
-            const int need = oct ? 3 : 2;
-            if (hasPending_ && std::fabs(semis(cand, pendingHz_)) < 0.8f) {
+            // jump: a new note needs agreeing candidates (fewer right after an attack); an octave jump of a note that is
+            // sounding without a new attack needs many more, because it is usually a wrong choice between two harmonics
+            // a leap of an octave or more without a new attack is almost always a wrong choice between harmonics
+            const bool oct = std::fabs(dfs) > 11.0f;
+            const int more = tracking_ == 0 ? 0 : (tracking_ == 1 ? 1 : 2);
+            int need = recentOnset ? (oct ? 3 : 2) : (oct ? 8 + 2 * more : 3 + more);
+            // between 0.3 and 0.9 semitones the candidate is usually a window that straddles two notes: it must also agree with itself
+            if (std::fabs(dfs) < 0.9f && !oct) need = std::max(2, std::min(need, 3));
+            // the old period no longer fits at all (legato change: hammer-on, pull-off, slide): follow quickly
+            if (heldM > 0.45f) need = std::min(need, oct ? 4 : 2);
+            if (hasPending_ && std::fabs(semis(cand, pendingHz_)) < 0.4f) {
                 if (++confirm_ >= need - 1) {
                     hz_ = cand;
                     hasPending_ = false;
@@ -236,12 +304,12 @@ private:
     int hop_ = 0;
     float a1_ = 0, a2_ = 0, b1_ = 0, b2_ = 0;
     uint32_t ph1_ = 0, ph2_ = 0;
-    bool voiced_ = false, hasPending_ = false;
+    bool voiced_ = false, hasPending_ = false, recentOnset_ = false;
     float hz_ = 0, pendingHz_ = 0, rms_ = 0, conf_ = 0;
     int unvoicedHops_ = 0, confirm_ = 0;
     bool busy_ = false;
-    int tau_ = 1, tauMax_ = 0, tauMin_ = 0;
-    uint32_t nds_ = 0;
+    int tau_ = 1, tauMax_ = 0, tauMin_ = 0, tracking_ = 1, wc_ = W, hopsSinceOnset_ = 1000, ageD_ = 100000;
+    uint32_t nds_ = 0, onsetNd_ = 0;
     float thr_ = 0, alpha_ = 0, fsd_ = 0;
 };
 

@@ -14,6 +14,7 @@ if len(sys.argv) < 2:
     sys.exit(__doc__)
 BOARD = sys.argv[1].rstrip("/")
 APPLY = len(sys.argv) > 2 and sys.argv[2] == "apply"
+ONLY = sys.argv[3] if len(sys.argv) > 3 else ""      # optional text: only presets whose name contains it
 defs = {e["fx"]: e for e in json.load(urllib.request.urlopen(BOARD + "/fx", timeout=20))}
 
 # (name <= 31 chars, fx, overrides)
@@ -291,6 +292,12 @@ MORE = [
  ("CE-1 deep (typical)", "ce1", dict(intensity=7, level=5)),
  ("CE-1 slow wide (typical)", "ce1", dict(intensity=2, level=5, sweep=3.0)),
  ("CE-1 stereo out (typical)", "ce1", dict(intensity=4, level=5, output=1)),
+ # ---- harmonizer presets made to try the pitch tracker (chromatic intervals follow the note you play; the last one is diatonic in Eb major, the key of a guitar tuned a half step down)
+ ("Track 1 octave up", "adelshifter", dict(dry=-9, tracking=1, v1on=1, v1mode=1, v1semi=12, v1level=0, v1pan=0, v2on=0, v3on=0)),
+ ("Track 2 octave down", "adelshifter", dict(dry=-9, tracking=1, v1on=1, v1mode=1, v1semi=-12, v1level=0, v1pan=0, v2on=0, v3on=0)),
+ ("Track 3 fifth up", "adelshifter", dict(dry=-9, tracking=1, v1on=1, v1mode=1, v1semi=7, v1level=0, v1pan=0, v2on=0, v3on=0)),
+ ("Track 4 fifth+octave up", "adelshifter", dict(dry=-9, tracking=1, v1on=1, v1mode=1, v1semi=7, v1level=-2, v1pan=-50, v2on=1, v2mode=1, v2semi=12, v2level=-2, v2pan=50, v3on=0)),
+ ("Track 5 3rd+5th Eb major", "adelshifter", dict(dry=-6, tracking=1, key=3, scale=0, v1on=1, v1mode=0, v1steps=2, v1level=-2, v1pan=-50, v2on=1, v2mode=0, v2steps=4, v2level=-3, v2pan=50, v3on=0)),
 ]
 
 P += MORE
@@ -307,7 +314,7 @@ for name, fx, ov in P:
         assert p['min'] <= ov[k] <= p['max'], (name, k, ov[k], p['min'], p['max'])
     parts = []
     for p in e['p']:
-        if p['k'] in ('gr', 'gr2'):
+        if p.get('kind') == 3:      # measured outputs (meters) are not settings
             continue
         v = ov.get(p['k'], p['def'])
         parts.append("%s=%s" % (p['k'], ('%.2f' % v).rstrip('0').rstrip('.') if v != int(v) else str(int(v))))
@@ -324,6 +331,8 @@ if APPLY:
     tok = re.search(r'NB_T="([a-z0-9]+)"', html).group(1)
     bad = 0
     for n, d in out:
+        if ONLY and ONLY not in n:
+            continue
         body = urllib.parse.urlencode({"t": tok, "op": "save", "n": n, "d": d}).encode()
         r = json.load(urllib.request.urlopen(urllib.request.Request(BOARD + "/bp", data=body), timeout=10))
         if not r.get("ok"):

@@ -7,7 +7,7 @@ A bare-metal guitar multi-effects processor for the **Raspberry Pi 5** with a **
 ## What it does
 
 * **Pedalboard grid** (6 rows x 12 columns): place blocks, drag them, draw links between them (series, parallel, splits, mixes), left/right routing, two inputs and two outputs.
-* **Blocks**: about 50 effects (see [EFFECTS.md](EFFECTS.md)), a NAM block, cabinet impulse responses, EQ, delays, reverbs, modulation, dynamics.
+* **Blocks**: about 60 effects, listed in alphabetical order in the add menu (see [EFFECTS.md](EFFECTS.md)), a NAM block, cabinet impulse responses, EQ, delays, reverbs, modulation, dynamics.
 * **NAM models** in A2 WaveNet form, converted to a compact `.adn` file by `tools/nam2adn.py` and run by the ADELnam engine (`adelnam_engine.hpp`), which is written for this project (no third-party code in the firmware).
 * **Web page** served by the board: presets, per-block controls and meters, model/IR library upload, MIDI settings, service functions, temperature and fan control.
 * **Seamless preset change** (the old preset's delay and reverb tails keep ringing while the new one starts).
@@ -92,6 +92,11 @@ The magnifier button next to the preset name opens an analysis of the preset. **
 
 ![The preset analysis panel](docs/img/preset_analysis.png)
 
+### Harmonizer
+
+* **Manual section:** with Manual on, each of the three voices has down and up arrows that move it by one semitone from the note you are playing now (hold to repeat). The voice is put in Chromatic mode, and the page shows the note being played and the note each voice makes, so a harmony can be built by ear. "Save settings..." stores the three voices as a named setting.
+* **Pitch tracker:** an attack detector limits the analysis window to the new note, the note that is sounding keeps its pitch while its period still fits, and an octave leap without a new attack needs many agreeing readings. On the synthetic test bench (`tools/tracker`) the notes reported shorter than 50 ms fell from 65 to 13, the note changes from 184 to 133 for 160 real notes, and the latency of picked notes from 27 to 18 ms; chords are still not followed as well as single notes.
+* Five presets named "Track 1..5" are made to try the tracker (octave up, octave down, fifth, fifth + octave, third and fifth in E-flat major).
 ### NAM models
 
 A2 WaveNet captures run in the ADELnam engine. Each model's input level is set from the metadata of the capture (`input_level_dbu`) and the interface's measured maximum level; bass, mid and treble controls and a per-block level offset are available. Models are uploaded from the page into the library, with an author/license note stored next to each one.

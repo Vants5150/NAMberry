@@ -155,6 +155,12 @@ body.lkdrag svg.nsv .nlab{pointer-events:none}
 .blkpop button.cp{background:#2a6fdb}
 .blkpop button.ps{background:#198754}
 .blkpop svg{width:24px;height:24px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+.shman{display:flex;flex-direction:column;gap:10px;padding:6px 0}
+.shman .shtop,.shman .shrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.shman .shrow .vn{min-width:5.5em;font-weight:600}
+.shman button.shar{width:48px;height:48px;font-size:22px;line-height:1;border-radius:10px}
+.shman .shval{min-width:13em;font-variant-numeric:tabular-nums}
+.shman .shnote{font-size:15px}
 .toastmini{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:80;background:#222;color:#fff;border-radius:10px;padding:10px 16px;font-size:13px;box-shadow:0 6px 20px rgba(0,0,0,.5);max-width:90vw}
 @keyframes trin{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
 .lpop{position:fixed;z-index:60;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:10px;box-shadow:0 8px 28px rgba(0,0,0,.4);display:flex;flex-direction:column;gap:8px;min-width:270px}
@@ -424,7 +430,9 @@ let FXD=[];
 const fxd=k=>FXD.find(d=>d.fx==k);
 const fxShort=d=>String(d.title).split(" (")[0];
 const nmOf=n=>n.t=="fx"?(fxd(n.fx)?fxShort(fxd(n.fx)):n.fx):(n.t=="vol"&&n.rt?"Routing":TNAME[n.t]);
-const addOpts=depth=>[["nam","NAM"],["vol","Volume"],["rout","Routing (routing only)"],["pan","Pan (stereo)"]].concat(FXD.filter(d=>!d.hid).map((d,i)=>[d.fx,d.title,String(d.title).indexOf("ToTest")==0?1:0,i]).sort((a,b)=>a[2]-b[2]||a[3]-b[3]).map(x=>[x[0],x[1]]));
+const addOpts=depth=>[["nam","NAM"],["vol","Volume"],["rout","Routing (routing only)"],["pan","Pan (stereo)"]].concat(FXD.filter(d=>!d.hid).map(d=>[d.fx,d.title]).sort((a,b)=>fxSortKey(a[1]).localeCompare(fxSortKey(b[1]),"en",{sensitivity:"base"})));
+/* effects in alphabetical order in the choice menus: the "ADEL" and "ToTest - " prefixes are ignored for the order (the text shown stays the same)*/
+function fxSortKey(t){return String(t).replace(/^ToTest - /,"").replace(/^ADEL\s*/i,"")}
 const fxMixIdx=n=>{const d=fxd(n.fx);return d?d.p.findIndex(p=>p.k=="mix"):-1};
 /* ToTest effects (fx_extra.cpp): they keep a mono input mono, except these four, which make the output stereo*/
 const XFX=["tsdrive","muff","fuzzface","tremolo","harmtrem","autowah","octaver","noisegate","univibe","flanger","rotary","tapeecho","booster","tonestack","swell","widener","vibrato","centaur","bluesdrv","ds1","ocd","guvnor","rangemaster","fz1","bender","fuzzfactory","phase90","smallstone","ce1","ce2","ad9","mflanger","dimension","autopan","slicer","crybaby","womantone","geq6","dynacomp","optocomp","limiter","analogdelay","duckdelay","sustainer","selector","tubescreamer","ratts","opticalla"];
@@ -919,7 +927,86 @@ async function mtick(){
   if(!document.hidden&&!idleNow()&&needM()){try{const fb=typeof sel=="number"?locate(sel):null;const r=await fetch("/m?_="+Date.now()+(fb&&fb.n.t=="fx"?"&b="+sel:""),{cache:"no-store"});const j=await r.json();mtApply(j);fxOut(j)}catch(e){ok=false}}
   setTimeout(mtick,ok?1000:2000);
 }
-/* effect panel: one box per group as in PiPedal's plugins; knobs (also logarithmic), menus, switches and measured values*/
+/* ADELshifter "Manual" section: with Manual on, every voice has down/up arrows that move it by one semitone from the note being played now;
+   the voice is switched to Chromatic mode and the page shows the played note and the note the voice makes, so a harmony can be built by ear*/
+/* saves the current values of a block as a named setting (same list as the Saved settings menu); the values are re-read first so that a change made a moment ago is included*/
+async function bpSaveFlow(id){
+  try{await stNow()}catch(e){}
+  const l=locate(id);if(!l||!l.n)return;
+  const n=l.n;
+  const nm=prompt("Name for the settings of this block:","");
+  if(!nm||!nm.trim())return;
+  const name=nm.trim();
+  if((S.bp||[]).some(b=>b.n==name)&&!confirm("Replace the existing \u0027"+name+"\u0027: replace it?"))return;
+  const r=await api("/bp",{op:"save",n:name,d:bpData(n)});warn(r);
+  if(r.ok)await g({op:"bpset",id:n.id,s:name});
+}
+const NOTE_NAMES=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const midiName=m=>NOTE_NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
+function shManual(n,d){
+  const ix=k=>d.p.findIndex(p=>p.k==k);
+  const det=el("details","fxg"),key="fxg_adelshifter_manual";
+  let open=true;try{const s=localStorage.getItem(key);if(s!==null)open=s=="1"}catch(e){}
+  det.open=open;det.ontoggle=()=>{try{localStorage.setItem(key,det.open?"1":"0")}catch(e){}};
+  det.appendChild(el("summary","","Manual"));
+  const box=el("div","shman");det.appendChild(box);
+  let played=null;                       /* MIDI note being played now (rounded), null if the tracker does not hear a note*/
+  const voices=[],rows=el("div","shman");
+  const top=el("div","shtop");
+  top.appendChild(el("span","","Manual"));
+  const sw=switchEl(async v=>{
+    lsSet("nb_shman",v?"1":"0");rows.style.display=v?"":"none";
+    if(v){for(let i=1;i<=3;i++){await g({op:"set",id:n.id,k:"v"+i+"mode",v:1})}}
+  });
+  top.appendChild(sw);
+  const live=el("b","shnote","Play a note");top.appendChild(live);
+  top.appendChild(btn("Save settings...","Save the three voices as a named setting: it appears in Saved settings of this block",()=>bpSaveFlow(n.id)));
+  box.appendChild(top);
+  box.appendChild(el("div","info","With Manual on the three voices are in Chromatic mode. Play a note, listen to the voice and move it up or down one semitone at a time with the arrows (hold the arrow to repeat) until it sounds right; the interval and the note it makes are shown. Switch the voice on if it is off."));
+  box.appendChild(rows);
+  const refresh=()=>{
+    live.textContent=played===null?"Play a note":"Playing: "+midiName(played);
+    voices.forEach(vc=>{
+      const s=Math.round(vc.semi);
+      vc.val.textContent=(s>0?"+":"")+s+" semitones"+(played===null?"":"  →  "+midiName(played+s));
+    });
+  };
+  for(let i=1;i<=3;i++){
+    const kOn=ix("v"+i+"on"),kSemi=ix("v"+i+"semi");
+    const vc={semi:(n.v&&n.v[kSemi])||0,at:0};
+    const row=el("div","shrow");
+    row.appendChild(el("span","vn","Voice "+i));
+    const onSw=switchEl(v=>g({op:"set",id:n.id,k:"v"+i+"on",v}));row.appendChild(onSw);
+    const dn=el("button","mini shar","▼"),up=el("button","mini shar","▲");dn.type=up.type="button";
+    dn.title="One semitone down";up.title="One semitone up";
+    vc.val=el("b","shval","");
+    const step=async dlt=>{
+      const nv=Math.max(-24,Math.min(24,Math.round(vc.semi)+dlt));
+      if(nv==Math.round(vc.semi))return;
+      vc.semi=nv;vc.at=Date.now();refresh();
+      await g({op:"set",id:n.id,k:"v"+i+"mode",v:1});
+      await g({op:"set",id:n.id,k:"v"+i+"on",v:1});onSw.sync(1);
+      await g({op:"set",id:n.id,k:"v"+i+"semi",v:nv});
+    };
+    const hold=(b,dlt)=>{
+      let t1=0,t2=0;
+      const stop=()=>{clearTimeout(t1);clearInterval(t2);t1=t2=0};
+      b.addEventListener("pointerdown",e=>{e.preventDefault();step(dlt);t1=setTimeout(()=>{t2=setInterval(()=>step(dlt),150)},450)});
+      ["pointerup","pointerleave","pointercancel"].forEach(ev=>b.addEventListener(ev,stop));
+    };
+    hold(dn,-1);hold(up,1);
+    row.appendChild(dn);row.appendChild(vc.val);row.appendChild(up);
+    rows.appendChild(row);
+    voices.push(vc);
+    addBind(n.id,nn=>{onSw.sync(nn.v[kOn]);if(Date.now()-vc.at>4000){vc.semi=nn.v[kSemi];refresh()}});
+  }
+  const man=lsGet("nb_shman","0")=="1";
+  sw.sync(man?1:0);rows.style.display=man?"":"none";
+  const kNote=ix("note"),kVoiced=ix("voiced");
+  if(kNote>=0)FXO.push({k:kNote,p:d.p[kNote],val:live,fn:(v,f)=>{played=(kVoiced>=0&&f[kVoiced]>0.5&&v>0)?Math.round(v):null;refresh()}});
+  refresh();
+  return det;
+}/* effect panel: one box per group as in PiPedal's plugins; knobs (also logarithmic), menus, switches and measured values*/
 let FXO=[];
 function fxEditor(c,n){
   if(n.fx=="selector")c.appendChild(el("div","info","The Selector sends the signal to ONE output at a time: it has outputs A, B (and C if Outputs = ABC) on the right side of the block, drag from the one you want to the block that must receive the signal. Choose the branch with Branch, from MIDI (Branch parameter) or by double clicking the block in the grid, which moves to the next branch. You can link several blocks from the same output. An output with no links is silence. When it is off, all the outputs pass."));
@@ -970,6 +1057,7 @@ function fxEditor(c,n){
       }
     });
     c.appendChild(det);
+    if(n.fx=="adelshifter"&&gi==0)c.appendChild(shManual(n,d));
   });
 }
 function fxOut(j){
@@ -977,6 +1065,7 @@ function fxOut(j){
   FXO.forEach(o=>{
     const v=j.f[o.k];if(v===undefined)return;
     const p=o.p;
+    if(o.fn){o.fn(v,j.f);return}
     if(o.lamp){o.lamp.classList.toggle("on",v>0.5);return}
     if(p.e)o.val.textContent=p.e[Math.max(0,Math.min(p.e.length-1,Math.round(v)))]||String(v);
     else{
