@@ -34,7 +34,7 @@ Measured on 2026-10-21 with firmware build `mcore92` on a Raspberry Pi 5 (48 kHz
 | RAT circuit model against real RAT captures | 1.49 dB rms over 294 points | fitted to 14 TONE3000 captures (so this is a fit, not an independent check) |
 | LA-2A style optical compressor | 0.5 - 0.6 dB gain-reduction error on music | fitted to SignalTrain recordings; about 1.2 - 2.2 dB off on noise not used in the fit |
 | All the other circuit models | not compared with recordings of the real pedals | see [EFFECTS.md](EFFECTS.md) for sources and assumptions |
-| Automated tests | 33 host test programs and 13 web-page tests, all passing | run as part of the `mcore92` build |
+| Automated tests | 35 host test steps and 13 web-page tests, all passing | run as part of the `mcore92` build |
 
 ### Latency
 
