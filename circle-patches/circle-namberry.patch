@@ -1,0 +1,364 @@
+diff --git a/addon/wlan/bcm4343.cpp b/addon/wlan/bcm4343.cpp
+index 1432685..a6510b6 100644
+--- a/addon/wlan/bcm4343.cpp
++++ b/addon/wlan/bcm4343.cpp
+@@ -295,6 +295,19 @@ boolean CBcm4343Device::CreateOpenNet (const char *pSSID, int nChannel, bool bHi
+ 	return bOK;
+ }
+ 
++boolean CBcm4343Device::CreateWPA2Net (const char *pSSID, int nChannel, bool bHidden, const char *pPassphrase)
++{
++	m_bOpenNet = m_bLinkUp = FALSE;
++
++	assert (pSSID != 0);
++	assert (pPassphrase != 0);
++	boolean bOK = Control ("createwpa %s %d %d %s", pSSID, nChannel, bHidden, pPassphrase);
++
++	m_bOpenNet = m_bLinkUp = bOK;
++
++	return bOK;
++}
++
+ boolean CBcm4343Device::DestroyOpenNet (void)
+ {
+ 	m_bOpenNet = m_bLinkUp = FALSE;
+diff --git a/addon/wlan/bcm4343.h b/addon/wlan/bcm4343.h
+index 39d5cf2..ef6742e 100644
+--- a/addon/wlan/bcm4343.h
++++ b/addon/wlan/bcm4343.h
+@@ -80,6 +80,7 @@ public:
+ 	/// \param bHidden Whether to hide the SSID
+ 	/// \return Operation successful?
+ 	boolean CreateOpenNet (const char *pSSID, int nChannel, bool bHidden);
++	boolean CreateWPA2Net (const char *pSSID, int nChannel, bool bHidden, const char *pPassphrase);	// WPA2-PSK access point (passphrase of 8..63 characters without spaces)
+ 	/// \brief Destroy created open network
+ 	boolean DestroyOpenNet (void);
+ 
+diff --git a/addon/wlan/ether4330.c b/addon/wlan/ether4330.c
+index 7a42469..c6878dc 100644
+--- a/addon/wlan/ether4330.c
++++ b/addon/wlan/ether4330.c
+@@ -230,6 +230,7 @@ enum{
+ 	CMescan,
+ 	CMcountry,
+ 	CMcreate,
++	CMcreatewpa,
+ 	CMdown,
+ };
+ 
+@@ -254,6 +255,7 @@ static Cmdtab cmds[] = {
+ 	{CMescan,	"escan", 3},
+ 	{CMcountry,	"country", 2},
+ 	{CMcreate,	"create", 4},
++	{CMcreatewpa,	"createwpa", 5},
+ 	{CMdown,	"down", 1},
+ };
+ 
+@@ -1920,13 +1922,30 @@ wljoin(Ctlr *ctl, char *ssid, int chan, uchar *bssid)
+ }
+ 
+ static void
+-wlcreateAP(Ctlr *ctl, char *ssid, int channel, int hidden)	/* by @sebastienNEC */
++wlcreateAP(Ctlr *ctl, char *ssid, int channel, int hidden, char *pass)	/* by @sebastienNEC; pass != nil: WPA2-PSK in the firmware */
+ {
+ 	wlcmdint(ctl, 3, 1);		/* DOWN */
+ 	wlcmdint(ctl, 20, 1);		/* SET_INFRA */
+ 	wlcmdint(ctl, 118, 1);		/* SET_AP */
+ 	wlcmdint(ctl, 30, channel);
++	wlcmdint(ctl, 0x56, 0);		/* AP: power save off */
++	wlsetint(ctl, "mpc", 0);		/* like brcmfmac: the radio does not switch off without connected stations */
++	wlcmdint(ctl, 76, 100);		/* beacon period */
++	if(pass != nil){
++		wlsetint(ctl, "wsec", 4);		/* AES */
++		wlsetint(ctl, "wpa_auth", 0x80);	/* WPA2-PSK */
++	}
+ 	wlcmdint(ctl, 2, 1);		/* UP */
++	if(pass != nil){
++		uchar pmk[4+64];
++		int pl = strlen(pass);
++		pl = MIN(pl, 63);
++		memset(pmk, 0, sizeof pmk);
++		put2(pmk, pl);		/* key_len */
++		put2(pmk+2, 1);		/* flags: passphrase */
++		memmove(pmk+4, pass, pl);
++		wlcmd(ctl, 1, 268, pmk, sizeof pmk, nil, 0);	/* SET_WSEC_PMK */
++	}
+ 
+ 	uchar join_params[4+WNameLen+14];
+ 	uchar *p = join_params;
+@@ -1941,6 +1960,18 @@ wlcreateAP(Ctlr *ctl, char *ssid, int channel, int hidden)	/* by @sebastienNEC *
+ 
+ 	wlsetint(ctl, "closednet", hidden);
+ 
++	if(iodebug && !waserror()){		/* AP diagnosis: chip state after creation */
++		uchar r[40];
++		wlcmd(ctl, 0, 117, nil, 0, r, 4);	/* GET_AP */
++		wlcmd(ctl, 0, 162, nil, 0, r, 4);	/* GET_UP */
++		wlcmd(ctl, 0, 29, nil, 0, r, 8);	/* GET_CHANNEL */
++		wlcmd(ctl, 0, 25, nil, 0, r, 36);	/* GET_SSID */
++		wlcmd(ctl, 0, 23, nil, 0, r, 6);	/* GET_BSSID */
++		wlcmd(ctl, 0, 37, nil, 0, r, 4);	/* GET_RADIO */
++		wlcmd(ctl, 0, 77, nil, 0, r, 4);	/* GET_DTIMPRD */
++		poperror();
++	}
++
+ 	/* TODO? beacon settings */
+ 
+ 	ctl->status = Connected;	/* TODO: check return code as in waitjoin() */
+@@ -2545,7 +2576,16 @@ etherbcmctl(Ether* edev, const void* buf, long n)
+ 		else if(ctlr->essid[0] == 0) cmderror(cb, "essid not set");
+ 		if ((i = atoi(cb->f[2])) >= 0 && i <= 16) ctlr->chanid = i;
+ 		else cmderror(cb, "bad channel number");
+-		if(ctlr->essid[0]) wlcreateAP(ctlr, ctlr->essid, ctlr->chanid, atoi(cb->f[3]));
++		if(ctlr->essid[0]) wlcreateAP(ctlr, ctlr->essid, ctlr->chanid, atoi(cb->f[3]), nil);
++		break;
++	case CMcreatewpa:	/* createwpa essid channel hidden passphrase */
++		if(strlen(cb->f[1]) == 0 || strlen(cb->f[1]) >= sizeof(ctlr->essid)) cmderror(cb, "bad essid");
++		strncpy(ctlr->essid, cb->f[1], sizeof(ctlr->essid)-1);
++		ctlr->essid[sizeof(ctlr->essid)-1] = 0;
++		if ((i = atoi(cb->f[2])) >= 1 && i <= 13) ctlr->chanid = i;
++		else cmderror(cb, "bad channel number");
++		if(strlen(cb->f[4]) < 8 || strlen(cb->f[4]) > 63) cmderror(cb, "passphrase must have 8 to 63 characters");
++		wlcreateAP(ctlr, ctlr->essid, ctlr->chanid, atoi(cb->f[3]), cb->f[4]);
+ 		break;
+ 	case CMdown:
+ 		wlcmdint(ctlr, 3, 0);		/* DOWN */
+diff --git a/include/circle/dmachannel-rp1.h b/include/circle/dmachannel-rp1.h
+index 7a8b23a..6e2b21e 100644
+--- a/include/circle/dmachannel-rp1.h
++++ b/include/circle/dmachannel-rp1.h
+@@ -130,6 +130,7 @@ public:
+ 	void SetCompletionRoutine (TCompletionRoutine *pRoutine, void *pParam);
+ 
+ 	/// \brief Start the DMA transfer
++	const unsigned *GetLLIWords (unsigned n) const { return (const unsigned *) m_pLLI[n]; }	// diagnostics (read-only)
+ 	void Start (void);
+ 
+ 	/// \brief Cancel running DMA transfer and wait for termination
+diff --git a/include/circle/sound/i2ssoundbasedevice-rp1.h b/include/circle/sound/i2ssoundbasedevice-rp1.h
+index 81da969..bb19dd7 100644
+--- a/include/circle/sound/i2ssoundbasedevice-rp1.h
++++ b/include/circle/sound/i2ssoundbasedevice-rp1.h
+@@ -62,6 +62,11 @@ public:
+ 	int GetRangeMin (void) const override;
+ 	int GetRangeMax (void) const override;
+ 
++	// diagnostics (read-only): LLI descriptors of the DMA channels (rx = 1 receive, 0 transmit)
++#ifndef USE_I2S_SOUND_IRQ
++	const unsigned *GetDmaLli (int rx, unsigned n) const { return (rx ? m_DMAChannelRX : m_DMAChannelTX).GetLLIWords (n); }
++	const unsigned *GetDmaBuffer (int rx, unsigned n) const { return (const unsigned *) (rx ? m_pDMABufferRX[n] : m_pDMABufferTX[n]); }
++#endif
+ 	boolean Start (void) override;
+ 
+ 	void Cancel (void) override;
+diff --git a/include/circle/sysconfig.h b/include/circle/sysconfig.h
+index 566e6eb..9b0cab0 100644
+--- a/include/circle/sysconfig.h
++++ b/include/circle/sysconfig.h
+@@ -155,7 +155,7 @@
+ // single core applications, because this may slow down the system
+ // because multiple cores may compete for bus time without use.
+ 
+-//#define ARM_ALLOW_MULTI_CORE
++#define ARM_ALLOW_MULTI_CORE
+ 
+ #endif
+ 
+@@ -273,7 +273,7 @@
+ // MAX_TASKS is the maximum number of tasks in the system.
+ 
+ #ifndef MAX_TASKS
+-#define MAX_TASKS		20
++#define MAX_TASKS		48
+ #endif
+ 
+ // TASK_STACK_SIZE is the stack size for each task.
+diff --git a/lib/exceptionhandler64.cpp b/lib/exceptionhandler64.cpp
+index afb99dd..0fa1a6d 100644
+--- a/lib/exceptionhandler64.cpp
++++ b/lib/exceptionhandler64.cpp
+@@ -73,6 +73,27 @@ void CExceptionHandler::Throw (unsigned nException, TAbortFrame *pFrame)
+ 	debug_stacktrace ((u64 *) sp, FromExcept);
+ #endif
+ 
++	if (nEC == 0x0 || nEC == 0x21)
++	{
++		// diagnosis: the code line as the processor sees it and as it is in DRAM (after dropping it from the cache)
++		const u64 nLine = pFrame->elr_el1 & ~63ULL;
++		u32 A[16], B[16];
++		unsigned nA = 0, nB = 0;
++		for (unsigned i = 0; i < 16; i++)
++		{
++			A[i] = ((volatile u32 *) nLine)[i];
++		}
++		asm volatile ("dsb sy\n\tdc civac, %0\n\tdsb sy\n\tisb" :: "r" (nLine) : "memory");
++		for (unsigned i = 0; i < 16; i++)
++		{
++			B[i] = ((volatile u32 *) nLine)[i];
++			nA += A[i] != 0;
++			nB += B[i] != 0;
++		}
++		CLogger::Get()->Write (FromExcept, LogError, "code line %lX: non-zero words before %u, after dropping it from the cache %u; word at PC %08X -> %08X",
++				nLine, nA, nB, A[(pFrame->elr_el1 >> 2) & 15], B[(pFrame->elr_el1 >> 2) & 15]);
++	}
++
+ 	CLogger::Get()->Write (FromExcept, LogPanic,
+ 		"%s (PC 0x%lX, EC 0x%lX, ISS 0x%lX, FAR 0x%lX, SP 0x%lX, LR 0x%lX, SPSR 0x%lX)",
+ 		s_pExceptionName[nException],
+diff --git a/lib/exceptionstub64.S b/lib/exceptionstub64.S
+index 746f83e..895d4b3 100644
+--- a/lib/exceptionstub64.S
++++ b/lib/exceptionstub64.S
+@@ -87,7 +87,68 @@ VectorTable:
+  * Abort stubs
+  */
+ 	stub	UnexpectedStub,		EXCEPTION_UNEXPECTED
+-	stub	SynchronousStub,	EXCEPTION_SYNCHRONOUS
++	stub	SyncNormalStub,	EXCEPTION_SYNCHRONOUS
++
++/*
++ * Synchronous exceptions: EC 0 with a good word in memory is a bad instruction fetch, which is retried (see patch_circle_stub.py)
++ */
++	.globl	SynchronousStub
++SynchronousStub:
++	stp	x0, x1, [sp, #-16]!
++	mrs	x0, esr_el1
++	lsr	x0, x0, #26
++	cbnz	x0, 9f				/* only EC 0 (unknown reason) */
++	stp	x2, x3, [sp, #-16]!
++	mrs	x2, elr_el1
++	bic	x0, x2, #63
++	dc	civac, x0				/* drop the line from the data caches, reread from DRAM */
++	dsb	sy
++	ldr	w1, [x2]
++	cbz	w1, 8f				/* really zero in memory: not recoverable */
++	ldr	x3, =ExcRetryPc
++	ldr	x0, [x3]
++	cmp	x0, x2
++	b.ne	7f
++	ldr	x3, =ExcRetryCnt
++	ldr	x0, [x3]
++	cmp	x0, #20
++	b.hs	8f				/* same pc failed again and again */
++	add	x0, x0, #1
++	str	x0, [x3]
++	b	6f
++7:	ldr	x3, =ExcRetryPc
++	str	x2, [x3]
++	ldr	x3, =ExcRetryCnt
++	str	xzr, [x3]
++6:	ldr	x3, =ExcRetryTotal
++	ldr	x0, [x3]
++	add	x0, x0, #1
++	str	x0, [x3]
++	mov	x0, #20000
++5:	sub	x0, x0, #1
++	cbnz	x0, 5b				/* pause of some microseconds: a transient condition may pass */
++	bic	x0, x2, #63
++	dc	civac, x0
++	dsb	sy
++	ic	ialluis				/* instruction caches (all cores' inner shareable domain) */
++	dsb	ish
++	isb
++	ldp	x2, x3, [sp], #16
++	ldp	x0, x1, [sp], #16
++	eret
++8:	ldp	x2, x3, [sp], #16
++9:	ldp	x0, x1, [sp], #16
++	b	SyncNormalStub
++
++	.ltorg
++
++	.data
++	.align	3
++	.globl	ExcRetryTotal
++ExcRetryTotal:	.quad	0
++ExcRetryPc:	.quad	0
++ExcRetryCnt:	.quad	0
++	.text
+ 	stub	SErrorStub,		EXCEPTION_SYSTEM_ERROR
+ 
+ /*
+diff --git a/lib/interrupt.cpp b/lib/interrupt.cpp
+index 514580b..31a27cc 100644
+--- a/lib/interrupt.cpp
++++ b/lib/interrupt.cpp
+@@ -356,6 +356,9 @@ void CInterruptSystem::InterruptHandler (void)
+ 
+ void InterruptHandler (void)
+ {
++#if AARCH == 64
++	asm volatile ("msr daifclr, #8" ::: "memory");	// debug: watchpoint also active in IRQs
++#endif
+ 	PeripheralExit ();	// exit from interrupted peripheral
+ 	
+ 	CInterruptSystem::InterruptHandler ();
+diff --git a/lib/interruptgic.cpp b/lib/interruptgic.cpp
+index 99ce6d3..800f9db 100644
+--- a/lib/interruptgic.cpp
++++ b/lib/interruptgic.cpp
+@@ -423,6 +423,9 @@ void CInterruptSystem::InterruptHandler (void)
+ 
+ void InterruptHandler (void)
+ {
++#if AARCH == 64
++	asm volatile ("msr daifclr, #8" ::: "memory");	// debug: watchpoint also active in IRQs
++#endif
+ 	CInterruptSystem::InterruptHandler ();
+ }
+ 
+diff --git a/lib/sound/i2ssoundbasedevice-rp1.cpp b/lib/sound/i2ssoundbasedevice-rp1.cpp
+index 490df6d..1d0ee70 100644
+--- a/lib/sound/i2ssoundbasedevice-rp1.cpp
++++ b/lib/sound/i2ssoundbasedevice-rp1.cpp
+@@ -141,6 +141,24 @@
+ #define	COMP2_RX_WORDSIZE_1(r)	(((r) & GENMASK(5, 3)) >> 3)
+ #define	COMP2_RX_WORDSIZE_0(r)	(((r) & GENMASK(2, 0)) >> 0)
+ 
++// DMA buffer: start and end on 64-byte cache lines, no other object on the same lines
++static u32 *AllocDMABuffer (unsigned nWords)
++{
++	size_t nBytes = (((size_t) nWords * sizeof (u32)) + 63) & ~(size_t) 63;
++	u8 *pRaw = new u8[nBytes + 64 + 64];
++	uintptr ulAligned = ((uintptr) pRaw + sizeof (u8 *) + 63) & ~(uintptr) 63;
++	((u8 **) ulAligned)[-1] = pRaw;
++	return (u32 *) ulAligned;
++}
++
++static void FreeDMABuffer (u32 *pBuffer)
++{
++	if (pBuffer)
++	{
++		delete [] ((u8 **) pBuffer)[-1];
++	}
++}
++
+ CI2SSoundBaseDevice::CI2SSoundBaseDevice (CInterruptSystem *pInterrupt,
+ 					  unsigned	    nSampleRate,
+ 					  unsigned	    nChunkSize,
+@@ -174,8 +192,8 @@ CI2SSoundBaseDevice::CI2SSoundBaseDevice (CInterruptSystem *pInterrupt,
+ #ifndef USE_I2S_SOUND_IRQ
+ 	m_DMAChannelTX (DMA_CHANNEL_RP1_NORMAL, pInterrupt),
+ 	m_DMAChannelRX (DMA_CHANNEL_RP1_NORMAL, pInterrupt),
+-	m_pDMABufferTX {new u32[m_nChunkSize], new u32[m_nChunkSize]},
+-	m_pDMABufferRX {new u32[m_nChunkSize], new u32[m_nChunkSize]},
++	m_pDMABufferTX {AllocDMABuffer (m_nChunkSize), AllocDMABuffer (m_nChunkSize)},
++	m_pDMABufferRX {AllocDMABuffer (m_nChunkSize), AllocDMABuffer (m_nChunkSize)},
+ #endif
+ 	m_bControllerInited (FALSE),
+ 	m_pController (nullptr)
+@@ -215,10 +233,10 @@ CI2SSoundBaseDevice::~CI2SSoundBaseDevice (void)
+ 	StopI2S ();
+ 
+ #ifndef USE_I2S_SOUND_IRQ
+-	delete [] m_pDMABufferTX[0];
+-	delete [] m_pDMABufferTX[1];
+-	delete [] m_pDMABufferRX[0];
+-	delete [] m_pDMABufferRX[1];
++	FreeDMABuffer (m_pDMABufferTX[0]);
++	FreeDMABuffer (m_pDMABufferTX[1]);
++	FreeDMABuffer (m_pDMABufferRX[0]);
++	FreeDMABuffer (m_pDMABufferRX[1]);
+ #endif
+ }
+ 

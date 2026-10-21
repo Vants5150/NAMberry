@@ -1,0 +1,154 @@
+// minimal vector for Circle (-nostdinc++): only the operations used by the ADEL engines. It allocates with Circle's new/delete.
+#ifndef _fxshim_vector
+#define _fxshim_vector
+
+// Circle's allocator does not free or reuse blocks larger than the last size class (512 KB): an ADELdelay instance (2 MB buffer per
+// channel) lost 4 MB at every creation. Large blocks therefore go back into a small reserve and are reused if the size is the same.
+namespace fxpool {
+struct Slot { void *p; unsigned long n; };
+inline Slot *slots (void) { static Slot s[8]; return s; }
+inline void *alloc (unsigned long nBytes)
+{
+	if (nBytes > 0x80000)
+	{
+		Slot *s = slots ();
+		for (unsigned i = 0; i < 8; i++)
+		{
+			if (s[i].p && s[i].n == nBytes)
+			{
+				void *p = s[i].p;
+				s[i].p = 0;
+				return p;
+			}
+		}
+	}
+	return ::operator new (nBytes);
+}
+inline void release (void *p, unsigned long nBytes)
+{
+	if (nBytes > 0x80000)
+	{
+		Slot *s = slots ();
+		for (unsigned i = 0; i < 8; i++)
+		{
+			if (!s[i].p)
+			{
+				s[i].p = p;
+				s[i].n = nBytes;
+				return;
+			}
+		}
+	}
+	::operator delete (p);
+}
+}
+
+namespace std {
+
+template <class T> class vector
+{
+public:
+	typedef T *iterator;
+	typedef const T *const_iterator;
+
+	vector (void) : m_p (0), m_n (0), m_cap (0) {}
+	vector (const vector &o) : m_p (0), m_n (0), m_cap (0) { copyFrom (o); }
+	vector &operator= (const vector &o)
+	{
+		if (this != &o)
+		{
+			release ();
+			copyFrom (o);
+		}
+		return *this;
+	}
+	~vector (void) { release (); }
+
+	void assign (unsigned long n, const T &v)
+	{
+		reserve (n);
+		for (unsigned long i = 0; i < n; i++)
+		{
+			m_p[i] = v;
+		}
+		m_n = n;
+	}
+
+	void resize (unsigned long n)
+	{
+		reserve (n);
+		for (unsigned long i = m_n; i < n; i++)
+		{
+			m_p[i] = T ();
+		}
+		m_n = n;
+	}
+
+	void reserve (unsigned long n)
+	{
+		if (n <= m_cap)
+		{
+			return;
+		}
+		T *p = static_cast<T *> (fxpool::alloc (n * sizeof (T)));
+		for (unsigned long i = 0; i < m_n; i++)
+		{
+			p[i] = m_p[i];
+		}
+		if (m_p)
+		{
+			fxpool::release (m_p, m_cap * sizeof (T));
+		}
+		m_p = p;
+		m_cap = n;
+	}
+
+	void push_back (const T &v)
+	{
+		if (m_n == m_cap)
+		{
+			reserve (m_cap ? m_cap * 2 : 8);
+		}
+		m_p[m_n++] = v;
+	}
+
+	void clear (void) { m_n = 0; }
+	unsigned long size (void) const { return m_n; }
+	bool empty (void) const { return m_n == 0; }
+	T *data (void) { return m_p; }
+	const T *data (void) const { return m_p; }
+	T &operator[] (unsigned long i) { return m_p[i]; }
+	const T &operator[] (unsigned long i) const { return m_p[i]; }
+	T *begin (void) { return m_p; }
+	T *end (void) { return m_p + m_n; }
+	const T *begin (void) const { return m_p; }
+	const T *end (void) const { return m_p + m_n; }
+
+private:
+	void release (void)
+	{
+		if (m_p)
+		{
+			fxpool::release (m_p, m_cap * sizeof (T));
+		}
+		m_p = 0;
+		m_n = m_cap = 0;
+	}
+
+	void copyFrom (const vector &o)
+	{
+		reserve (o.m_n);
+		for (unsigned long i = 0; i < o.m_n; i++)
+		{
+			m_p[i] = o.m_p[i];
+		}
+		m_n = o.m_n;
+	}
+
+	T *m_p;
+	unsigned long m_n, m_cap;
+};
+
+}
+
+#endif

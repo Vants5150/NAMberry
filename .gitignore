@@ -1,0 +1,15 @@
+# build outputs and local files that must never be published
+*.o
+*.elf
+*.map
+*.img
+*.bak
+*.bak[0-9]*
+*.bak_*
+*.pre_*
+__pycache__/
+config_local.h
+ota.key
+*.key
+*.pem
+*.log

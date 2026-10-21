@@ -1,0 +1,4 @@
+// config_local.h.example - copy to config_local.h (git-ignored) and edit.
+// Address of the machine that receives the board's syslog and is allowed to push OTA updates.
+#define SYSLOG_SERVER_IP	{192, 168, 1, 10}
+#define OTA_ALLOWED_IP		{192, 168, 1, 10}

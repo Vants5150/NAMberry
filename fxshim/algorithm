@@ -1,0 +1,42 @@
+// minimal algorithm for Circle (-nostdinc++)
+#ifndef _fxshim_algorithm
+#define _fxshim_algorithm
+
+namespace std {
+
+template <class T> inline const T &min (const T &a, const T &b) { return b < a ? b : a; }
+template <class T> inline const T &max (const T &a, const T &b) { return a < b ? b : a; }
+template <class T> inline T clamp_ (T v, T lo, T hi) { return v < lo ? lo : (v > hi ? hi : v); }
+template <class T> inline void swap (T &a, T &b) { T t = (T &&) a; a = (T &&) b; b = (T &&) t; }
+
+template <class It, class V> inline void fill (It first, It last, const V &v)
+{
+	for (; first != last; ++first)
+	{
+		*first = v;
+	}
+}
+
+// insertion sort: the uses are a few tens of elements, at initialization time
+template <class It, class Cmp> inline void sort (It first, It last, Cmp cmp)
+{
+	for (It i = first; i != last; ++i)
+	{
+		It j = i;
+		while (j != first)
+		{
+			It p = j;
+			--p;
+			if (!cmp (*j, *p))
+			{
+				break;
+			}
+			swap (*j, *p);
+			j = p;
+		}
+	}
+}
+
+}
+
+#endif

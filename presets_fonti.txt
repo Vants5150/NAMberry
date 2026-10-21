@@ -1,0 +1,27 @@
+Block presets of the Real plugins: sources (2026-10-19)
+Conversion of clock hours to a 0-10 knob: 7:00 = 0, 12:00 = 5, 17:00 = 10 (one hour = one unit; "Max" = 10).
+Only settings with a citable source. Not created because there is no reliable source: Rangemaster, DS-1, Tone Bender MkII, Phase 90, Dyna Comp, Hendrix/Fuzz Face (no documented value beyond the manual), CE-2, CE-1, AD9, Micro Flanger, Small Stone, Wah.
+
+ADELScreamerTS (Tube Screamer) - Reverb News, "How to Use Your Tube Screamer to Dial-In the Tones of Five Famous Players", Zack Hillman, 15/12/2017
+  https://reverb.com/news/how-to-use-your-tube-screamer-to-dial-in-the-tones-of-five-famous-players
+  SRV (Reverb)            TS808  Drive 8:30 (1.5)  Tone Max (10)      Level 3:00 (8)
+  Anastasio 1 (Reverb)    TS9    Drive 9:00 (2)    Tone 1:30 (6.5)    Level Max (10)
+  Anastasio 2 (Reverb)    TS9    Drive Max (10)    Tone 1:30 (6.5)    Level Max (10)
+  Hammett (Reverb)        TS9    Drive Max (10)    Tone 5:00 (10)     Level 1:00 (6)
+  The Edge (Reverb)       TS9    Drive 2:00 (7)    Tone 11:00 (4)     Level 12:00 (5)
+  Bonamassa (Reverb)      TS808  Drive 1:00 (6)    Tone 1:30 (6.5)    Level 3:00 (8)
+  (SRV: the article says "TS808, TS9, TS10"; TS808 chosen.)
+
+ADELBigMuffReal - Reverb News, "How to Use Big Muffs to Dial-In the Tone of Five Famous Guitarists", Zack Hillman, 27/12/2017
+  https://reverb.com/news/how-to-use-big-muffs-to-dial-in-the-tone-of-five-famous-guitarists
+  Gilmour Rams Head (Reverb)  Ram's Head  Volume 12:00 (5)  Tone 2:00 (7)   Sustain 9:00 (2)
+  Mascis Rams Head (Reverb)   Ram's Head  Volume Max (10)    Tone 11:00 (4)  Sustain Max (10)
+  (the article does not say which Ram's Head: the block's V3 1976 version was chosen. Fogerty, Corgan, Auerbach and Bootsy use models the block does not have: Civil War, op-amp, Green Russian, Bass Muff.)
+
+ADELCentaurReal (Klon) - Guitar World, "John Mayer signs fan's Klon Centaur onstage and marks his specific settings", Matt Owen, 11/05/2022
+  https://www.guitarworld.com/news/john-mayer-klon-centaur-settings
+  Mayer (Guitar World)    Gain 11:00 (4)  Output 11:00 (4)  Treble about 1:00 (6)  1N34A diodes like the original
+
+ADELFuzzFaceReal - Dunlop JHF1 / FFM6 / JHF3 manuals (Fuzz Face): "Start with both controls at 12 o'clock."
+  https://statics.qloud.ar/casa-libertella-03-2020/72100-jhf1.pdf
+  Dunlop manual 12h-12h   Fuzz 12:00 (5)  Volume 12:00 (5)  (the manufacturer's starting point, not Hendrix's settings)

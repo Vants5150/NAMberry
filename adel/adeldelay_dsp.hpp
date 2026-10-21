@@ -1,0 +1,352 @@
+// ADELdelay: stereo delay with mono input. Digital / Tape / BBD, ping-pong, multi-tap, reverse, diffusion,
+// wow & flutter, synchronous tremolo, ducking, hold. Public techniques, no third-party code.
+#pragma once
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <vector>
+
+#include "dspkit.hpp"
+
+#if defined(__x86_64__) || defined(__i386__)
+#include <xmmintrin.h>
+#endif
+
+namespace adeldelay {
+
+struct Params {
+    float mix = 0.35f;          // 0..1
+    float levelDb = 0.f;
+    float feedback = 0.40f;     // 0..1.1
+    float timeMs = 400.f;
+    int rhythm = 0;             // index into kRatios
+    float glideMs = 80.f;
+    float pingpong = 0.f;       // 0..1
+    float rOffset = 1.0f;       // 0.5..2
+    float tap2 = 0.f, tap2r = 0.75f;
+    float tap3 = 0.f, tap3r = 0.5f;
+    float tapSpread = 1.0f;     // 0..1
+    int mode = 0;               // 0 Digital, 1 Tape, 2 BBD
+    float character = 0.5f;     // 0..1
+    float fbLow = 80.f, fbHigh = 9000.f;
+    float drive = 0.f;          // 0..1
+    float diffusion = 0.f;      // 0..1
+    float reverse = 0.f;        // 0..1
+    float modDepthMs = 0.f, modRate = 0.8f;
+    float wow = 0.f, flutter = 0.f;      // 0..1
+    float tremDepth = 0.f;      // 0..1
+    int tremShape = 0;          // 0 sine, 1 triangle, 2 square
+    int tremDiv = 1;            // index into kTremMul
+    float duck = 0.f;           // 0..1
+    float duckRelMs = 300.f;
+    float hold = 0.f;           // 0 o 1
+    bool wetOnly = false;       // output = repeats only (no dry signal)
+};
+
+static const float kRatios[8] = {1.0f, 0.75f, 0.5f, 1.f / 3.f, 0.25f, 1.5f, 2.0f, 2.f / 3.f};
+static const float kTremMul[5] = {0.5f, 1.f, 2.f, 3.f, 4.f};
+
+class Delay {
+public:
+    void init(double sampleRate) {
+        fs_ = sampleRate;
+        scale_ = float(fs_ / 48000.0);
+        uint32_t need = uint32_t(5.6 * fs_);
+        uint32_t sz = 1;
+        while (sz < need) sz <<= 1;
+        const int apl[4] = {113, 191, 307, 421};
+        for (int c = 0; c < 2; ++c) {
+            ch_[c].buf.assign(sz, 0.f);
+            ch_[c].mask = sz - 1;
+            for (int k = 0; k < 4; ++k) {
+                ch_[c].ap[k].assign(std::max(8, int(std::lround((apl[k] + 17 * c) * scale_))), 0.f);
+            }
+        }
+        clear();
+    }
+
+    void clear() {
+        for (int c = 0; c < 2; ++c) {
+            Chan& h = ch_[c];
+            std::fill(h.buf.begin(), h.buf.end(), 0.f);
+            for (int k = 0; k < 4; ++k) {
+                std::fill(h.ap[k].begin(), h.ap[k].end(), 0.f);
+                h.apI[k] = 0;
+            }
+            h.w = 0;
+            h.os.clear();
+            h.rvPh = 0.f;
+            h.hp1 = h.hp2 = h.fl1 = h.fl2 = h.tl1 = h.tl2 = h.bump = 0.f;
+            h.b1 = h.b2 = h.b3 = h.b4 = 0.f;
+            h.rwWow = h.rwFlu = h.rwWow2 = h.rwFlu2 = 0.f;
+        }
+        rng_ = 0x9E3779B9u;
+        env_ = 0.f;
+        lfoMod_ = lfoWow_ = lfoFlu_ = trem_ = 0.f;
+        first_ = true;
+    }
+
+    void process(const float* in, float* outL, float* outR, uint32_t n, const Params& p) {
+#if defined(__aarch64__)
+        uint64_t fpcr;
+        asm volatile("mrs %0, fpcr" : "=r"(fpcr));
+        uint64_t fpcrNew = fpcr | (1ull << 24);
+        asm volatile("msr fpcr, %0" ::"r"(fpcrNew));
+#elif defined(__x86_64__) || defined(__i386__)
+        unsigned csr = _mm_getcsr();
+        _mm_setcsr(csr | 0x8040);
+#endif
+        const float fs = float(fs_);
+        const float ratio = kRatios[std::min(7, std::max(0, p.rhythm))];
+        const float tT = clampf(p.timeMs * ratio, 10.f, 3000.f) * 1e-3f * fs;
+        if (first_) {
+            tCur_ = tT;
+            mix_ = p.wetOnly ? 1.f : clampf(p.mix, 0.f, 1.f);
+            dryS_ = p.wetOnly ? 0.f : 1.f;
+            pp_ = clampf(p.pingpong, 0.f, 1.f);
+            holdS_ = p.hold > 0.5f ? 1.f : 0.f;
+            first_ = false;
+        }
+        const float glideC = 1.f - std::exp(-1.f / (std::max(10.f, p.glideMs) * 1e-3f * fs));
+        // Wet Only: the dry comes out of the output and the repeats go to full level (Mix does not count; adjust with Level)
+        const float mixT = p.wetOnly ? 1.f : clampf(p.mix, 0.f, 1.f);
+        const float dryT = p.wetOnly ? 0.f : 1.f;
+        const float levG = std::pow(10.f, clampf(p.levelDb, -48.f, 24.f) / 20.f);
+        const float fbT = clampf(p.feedback, 0.f, 1.1f);
+        const float ppT = clampf(p.pingpong, 0.f, 1.f);
+        const float rOff = clampf(p.rOffset, 0.5f, 2.0f);
+        const float holdT = p.hold > 0.5f ? 1.f : 0.f;
+        const float chr = clampf(p.character, 0.f, 1.f);
+        const int mode = std::min(2, std::max(0, p.mode));
+        auto alpha = [fs](float f) { return 1.f - std::exp(-6.2831853f * std::min(f, 0.45f * fs) / fs); };
+        Blk b;
+        b.mode = mode;
+        b.fbA = alpha(clampf(p.fbHigh, 500.f, 20000.f));
+        b.hpA = alpha(clampf(p.fbLow, 10.f, 2000.f));
+        b.tapeA = alpha(12000.f + (2800.f - 12000.f) * chr);
+        b.bumpA = alpha(110.f);
+        b.bumpAmt = 0.30f * chr;
+        float tMsNow = tCur_ / fs * 1000.f;
+        float fcB = clampf(12000.f * std::pow(100.f / std::max(20.f, tMsNow), 0.5f), 1800.f, 12000.f) * (1.f - 0.3f * chr);
+        b.bbdA = alpha(fcB);
+        b.noise = mode == 2 ? std::pow(10.f, (-78.f + 14.f * chr) / 20.f) : (mode == 1 ? std::pow(10.f, (-84.f + 10.f * chr) / 20.f) : 0.f);
+        float driveEff = clampf(p.drive, 0.f, 1.f) + (mode == 1 ? 0.22f * chr : (mode == 2 ? 0.12f * chr : 0.f));
+        b.satK = 1.f + 6.f * driveEff;
+        b.satOn = driveEff > 0.002f;
+        b.diffG = 0.62f * clampf(p.diffusion, 0.f, 1.f);
+        const float revT = clampf(p.reverse, 0.f, 1.f);
+        const float t2 = clampf(p.tap2r, 0.1f, 1.f), t3 = clampf(p.tap3r, 0.1f, 1.f);
+        const float lv2 = clampf(p.tap2, 0.f, 1.f), lv3 = clampf(p.tap3, 0.f, 1.f);
+        const float spr = clampf(p.tapSpread, 0.f, 1.f);
+        const float pan2L = std::cos((0.5f - 0.5f * spr) * 1.5707963f), pan2R = std::sin((0.5f - 0.5f * spr) * 1.5707963f);
+        const float pan3L = std::cos((0.5f + 0.5f * spr) * 1.5707963f), pan3R = std::sin((0.5f + 0.5f * spr) * 1.5707963f);
+        const float modDepth = clampf(p.modDepthMs, 0.f, 10.f) * 1e-3f * fs;
+        const float wowD = clampf(p.wow, 0.f, 1.f) * 0.004f * fs;
+        const float fluD = clampf(p.flutter, 0.f, 1.f) * 0.00025f * fs;
+        const float incMod = 6.2831853f * p.modRate / fs;
+        const float incWow = 6.2831853f * 0.6f / fs;
+        const float incFlu = 6.2831853f * 7.5f / fs;
+        const float tremD = clampf(p.tremDepth, 0.f, 1.f);
+        const float tremMul = kTremMul[std::min(4, std::max(0, p.tremDiv))];
+        const float duckT = clampf(p.duck, 0.f, 1.f);
+        const float relC = std::exp(-1.f / (std::max(20.f, p.duckRelMs) * 1e-3f * fs));
+        const float sm = 0.002f;
+
+        for (uint32_t t = 0; t < n; ++t) {
+            mix_ += sm * (mixT - mix_);
+            dryS_ += sm * (dryT - dryS_);
+            pp_ += sm * (ppT - pp_);
+            holdS_ += 0.0008f * (holdT - holdS_);
+            rev_ += sm * (revT - rev_);
+            tCur_ += glideC * (tT - tCur_);
+            const float x = in[t];
+            float ax = std::fabs(x);
+            env_ = ax > env_ ? env_ + 0.05f * (ax - env_) : env_ * relC;
+            float wetG = 1.f - duckT * std::sqrt(clampf(env_ * 6.f, 0.f, 1.f));
+
+            // time modulation
+            lfoMod_ += incMod; if (lfoMod_ > 6.2831853f) lfoMod_ -= 6.2831853f;
+            lfoWow_ += incWow; if (lfoWow_ > 6.2831853f) lfoWow_ -= 6.2831853f;
+            lfoFlu_ += incFlu; if (lfoFlu_ > 6.2831853f) lfoFlu_ -= 6.2831853f;
+            float modS[2];
+            for (int c = 0; c < 2; ++c) {
+                Chan& h = ch_[c];
+                rng_ ^= rng_ << 13; rng_ ^= rng_ >> 17; rng_ ^= rng_ << 5;
+                float nz = float(int32_t(rng_)) * (1.f / 2147483648.f);
+                h.rwWow += 1.0e-4f * (nz - h.rwWow);
+                h.rwWow2 += 1.0e-4f * (h.rwWow - h.rwWow2);
+                h.rwFlu += 2.0e-3f * (nz - h.rwFlu);
+                h.rwFlu2 += 2.0e-3f * (h.rwFlu - h.rwFlu2);
+                float ph = c ? 1.7f : 0.f;
+                modS[c] = modDepth * std::sin(lfoMod_ + ph) +
+                          wowD * (0.75f * std::sin(lfoWow_ + ph) + 0.25f * clampf(h.rwWow2 * 140.f, -1.f, 1.f)) +
+                          fluD * (0.7f * std::sin(lfoFlu_ + 2.f * ph) + 0.3f * clampf(h.rwFlu2 * 30.f, -1.f, 1.f));
+            }
+            const float tL = tCur_, tR = clampf(tCur_ * rOff, 0.01f * fs, 5.0f * fs);
+            // dL/dR: "true" time of the line; the echo path compensates the oversampling latency in the read
+            const float dL = std::max(40.f, tL + modS[0]), dR = std::max(40.f, tR + modS[1]);
+            const float kOs = float(dspkit::Os4::LATENCY);
+            float yL = dspkit::readLagrange8(ch_[0].buf.data(), ch_[0].mask, ch_[0].w, dL - kOs);
+            float yR = dspkit::readLagrange8(ch_[1].buf.data(), ch_[1].mask, ch_[1].w, dR - kOs);
+            // extra heads (from both lines)
+            float tapA = 0.f, tapB = 0.f;
+            if (lv2 > 0.002f)
+                tapA = 0.5f * (dspkit::readLagrange8(ch_[0].buf.data(), ch_[0].mask, ch_[0].w, std::max(8.f, dL * t2)) +
+                               dspkit::readLagrange8(ch_[1].buf.data(), ch_[1].mask, ch_[1].w, std::max(8.f, dR * t2)));
+            if (lv3 > 0.002f)
+                tapB = 0.5f * (dspkit::readLagrange8(ch_[0].buf.data(), ch_[0].mask, ch_[0].w, std::max(8.f, dL * t3)) +
+                               dspkit::readLagrange8(ch_[1].buf.data(), ch_[1].mask, ch_[1].w, std::max(8.f, dR * t3)));
+            // coloration and feedback
+            float cL = colour(ch_[0], yL, b, holdS_);
+            float cR = colour(ch_[1], yR, b, holdS_);
+            // reverse (on the lines, before the coloration)
+            float eL = cL, eR = cR;
+            if (rev_ > 0.002f) {
+                float rL = reverseRead(ch_[0], std::min(dL, 2.5f * fs));
+                float rR = reverseRead(ch_[1], std::min(dR, 2.5f * fs));
+                eL = (1.f - rev_) * cL + rev_ * rL;
+                eR = (1.f - rev_) * cR + rev_ * rR;
+            }
+            // write with ping-pong
+            const float g = (1.f - holdS_) * fbT + holdS_ * 0.99996f;
+            const float inj = 1.f - holdS_;
+            float fL = g * cL, fR = g * cR;
+            float wL = inj * x + (1.f - pp_) * fL + pp_ * fR;
+            float wR = inj * x * (1.f - pp_) + (1.f - pp_) * fR + pp_ * fL;
+            ch_[0].buf[ch_[0].w & ch_[0].mask] = softLimit(wL);
+            ch_[1].buf[ch_[1].w & ch_[1].mask] = softLimit(wR);
+            ++ch_[0].w;
+            ++ch_[1].w;
+            // output: echo + extra heads
+            float oL = eL + lv2 * pan2L * tapA + lv3 * pan3L * tapB;
+            float oR = eR + lv2 * pan2R * tapA + lv3 * pan3R * tapB;
+            // tremolo synchronized to the tempo
+            if (tremD > 0.002f) {
+                trem_ += tremMul / std::max(64.f, tL);
+                if (trem_ >= 1.f) trem_ -= 1.f;
+                float s;
+                if (p.tremShape == 1) s = 1.f - std::fabs(2.f * trem_ - 1.f);
+                else if (p.tremShape == 2) s = 0.5f + 0.5f * std::tanh(8.f * std::sin(6.2831853f * trem_));
+                else s = 0.5f - 0.5f * std::cos(6.2831853f * trem_);
+                oL *= 1.f - tremD * s;
+                oR *= 1.f - tremD * (1.f - s);
+            }
+            outL[t] = dryS_ * x + mix_ * levG * wetG * oL;
+            outR[t] = dryS_ * x + mix_ * levG * wetG * oR;
+        }
+#if defined(__aarch64__)
+        asm volatile("msr fpcr, %0" ::"r"(fpcr));
+#elif defined(__x86_64__) || defined(__i386__)
+        _mm_setcsr(csr);
+#endif
+    }
+
+private:
+    struct Chan {
+        std::vector<float> buf;
+        uint32_t mask = 0, w = 0;
+        float hp1 = 0, hp2 = 0, fl1 = 0, fl2 = 0, tl1 = 0, tl2 = 0, bump = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0;
+        std::vector<float> ap[4];
+        int apI[4] = {};
+        float rvPh = 0, rwWow = 0, rwFlu = 0, rwWow2 = 0, rwFlu2 = 0;
+        dspkit::Os4 os;
+    };
+
+    struct Blk {
+        int mode = 0;
+        float fbA = 0, hpA = 0, tapeA = 0, bumpA = 0, bumpAmt = 0, bbdA = 0, noise = 0, satK = 1, diffG = 0;
+        bool satOn = false;
+    };
+
+    static float clampf(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
+
+    static float softLimit(float x) {
+        float a = std::fabs(x);
+        if (a < 0.7f) return x;
+        float y = 0.7f + 0.3f * std::tanh((a - 0.7f) / 0.3f);
+        return x < 0 ? -y : y;
+    }
+
+    static inline float readCubic(const float* b, uint32_t mask, uint32_t w, float dly) {
+        float dfl = std::floor(dly);
+        float f = 1.f - (dly - dfl);
+        uint32_t i = w - uint32_t(int32_t(dfl)) - 1u;
+        float y0 = b[(i - 1) & mask], y1 = b[i & mask], y2 = b[(i + 1) & mask], y3 = b[(i + 2) & mask];
+        float c1 = 0.5f * (y2 - y0);
+        float c2 = y0 - 2.5f * y1 + 2.f * y2 - 0.5f * y3;
+        float c3 = 0.5f * (y3 - y0) + 1.5f * (y1 - y2);
+        return ((c3 * f + c2) * f + c1) * f + y1;
+    }
+
+    // reversed read from the delay line: two heads with Hann windows, chunk of length C
+    float reverseRead(Chan& c, float chunk) {
+        float wd = 2.f * std::max(64.f, chunk);
+        c.rvPh += 2.f / wd;
+        c.rvPh -= std::floor(c.rvPh);
+        float p2 = c.rvPh + 0.5f;
+        p2 -= std::floor(p2);
+        float g1 = 0.5f - 0.5f * std::cos(6.2831853f * c.rvPh);
+        float g2 = 0.5f - 0.5f * std::cos(6.2831853f * p2);
+        return g1 * readCubic(c.buf.data(), c.mask, c.w, c.rvPh * wd + 4.f) +
+               g2 * readCubic(c.buf.data(), c.mask, c.w, p2 * wd + 4.f);
+    }
+
+    // coloration chain (mode, filters, saturation, diffusion)
+    float colour(Chan& c, float y, const Blk& b, float hold) {
+        float s = y;
+        if (b.mode == 1) {  // tape
+            c.tl1 += b.tapeA * (s - c.tl1);
+            c.tl2 += b.tapeA * (c.tl1 - c.tl2);
+            s = c.tl2;
+            c.bump += b.bumpA * (s - c.bump);
+            s += b.bumpAmt * c.bump;
+            rng_ ^= rng_ << 13; rng_ ^= rng_ >> 17; rng_ ^= rng_ << 5;
+            s += b.noise * float(int32_t(rng_)) * (1.f / 2147483648.f);
+        } else if (b.mode == 2) {  // BBD
+            c.b1 += b.bbdA * (s - c.b1);
+            c.b2 += b.bbdA * (c.b1 - c.b2);
+            c.b3 += b.bbdA * (c.b2 - c.b3);
+            c.b4 += b.bbdA * (c.b3 - c.b4);
+            s = c.b4;
+            rng_ ^= rng_ << 13; rng_ ^= rng_ >> 17; rng_ ^= rng_ << 5;
+            s += b.noise * float(int32_t(rng_)) * (1.f / 2147483648.f);
+        }
+        // filters in the feedback
+        c.fl1 += b.fbA * (s - c.fl1);
+        c.fl2 += b.fbA * (c.fl1 - c.fl2);
+        s = c.fl2;
+        c.hp1 += b.hpA * (s - c.hp1);
+        s -= c.hp1;
+        c.hp2 += b.hpA * (s - c.hp2);
+        s -= c.hp2;
+        // in hold the signal circulates without losses
+        s = (1.f - hold) * s + hold * y;
+        {   // saturation with 4x oversampling (always in the path: constant latency, compensated in the read)
+            const bool on = b.satOn;
+            const float k = b.satK;
+            s = c.os.process(s, [on, k](float v) { return on ? std::tanh(k * v) / k : v; });
+        }
+        if (b.diffG > 0.002f) {
+            for (int k = 0; k < 4; ++k) {
+                std::vector<float>& a = c.ap[k];
+                float d = a[c.apI[k]];
+                float u = s - b.diffG * d;
+                a[c.apI[k]] = u;
+                if (++c.apI[k] >= int(a.size())) c.apI[k] = 0;
+                s = d + b.diffG * u;
+            }
+        }
+        return s;
+    }
+
+    double fs_ = 48000.0;
+    float scale_ = 1.f;
+    Chan ch_[2];
+    float dryS_ = 1.f;
+    float mix_ = 0, pp_ = 0, holdS_ = 0, rev_ = 0, tCur_ = 0, env_ = 0, trem_ = 0;
+    float lfoMod_ = 0, lfoWow_ = 0, lfoFlu_ = 0;
+    uint32_t rng_ = 1;
+    bool first_ = true;
+};
+
+}  // namespace adeldelay

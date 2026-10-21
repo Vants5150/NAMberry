@@ -1,0 +1,16 @@
+// cstdio for Circle: empty snprintf (only needed by the plugins' diagnostic texts, which do not exist here)
+#ifndef _fxshim_cstdio
+#define _fxshim_cstdio
+typedef __SIZE_TYPE__ size_t;
+namespace std {
+using ::size_t;
+inline int snprintf (char *p, size_t n, const char *, ...)
+{
+	if (n > 0)
+	{
+		p[0] = 0;
+	}
+	return 0;
+}
+}
+#endif

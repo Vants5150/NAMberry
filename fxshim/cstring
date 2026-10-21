@@ -1,0 +1,9 @@
+// cstring per il Circle: memset / memcpy
+#ifndef _fxshim_cstring
+#define _fxshim_cstring
+extern "C" void *memset (void *, int, __SIZE_TYPE__);
+extern "C" void *memcpy (void *, const void *, __SIZE_TYPE__);
+extern "C" void *memmove (void *, const void *, __SIZE_TYPE__);
+typedef __SIZE_TYPE__ size_t;
+namespace std { using ::memset; using ::memcpy; using ::memmove; using ::size_t; }
+#endif

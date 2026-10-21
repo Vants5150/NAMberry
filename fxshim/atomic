@@ -1,0 +1,27 @@
+// minimal atomic for Circle (single core): load/store/exchange/fetch_add with the compiler's generic primitives
+// (they also work with float, unlike the "_n" versions)
+#ifndef _fxshim_atomic
+#define _fxshim_atomic
+
+namespace std {
+
+enum memory_order { memory_order_relaxed = __ATOMIC_RELAXED, memory_order_acquire = __ATOMIC_ACQUIRE,
+		    memory_order_release = __ATOMIC_RELEASE, memory_order_acq_rel = __ATOMIC_ACQ_REL,
+		    memory_order_seq_cst = __ATOMIC_SEQ_CST };
+
+template <class T> struct atomic
+{
+	T v;
+	constexpr atomic (void) : v () {}
+	constexpr atomic (T x) : v (x) {}
+	T load (memory_order o = memory_order_seq_cst) const { T r; __atomic_load (&v, &r, (int) o); return r; }
+	void store (T x, memory_order o = memory_order_seq_cst) { __atomic_store (&v, &x, (int) o); }
+	T exchange (T x, memory_order o = memory_order_seq_cst) { T r; __atomic_exchange (&v, &x, &r, (int) o); return r; }
+	T fetch_add (T x, memory_order o = memory_order_seq_cst) { return __atomic_fetch_add (&v, x, (int) o); }
+	operator T (void) const { return load (); }
+	T operator= (T x) { store (x); return x; }
+};
+
+}
+
+#endif
