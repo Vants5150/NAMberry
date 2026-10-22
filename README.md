@@ -42,6 +42,16 @@ The guitar goes into the Pisound, the Raspberry Pi 5 processes it and the result
 
 *The web page served by the board, showing a test preset with two NAM captures, compressor, noise gate, MXR 117 flanger, Boss CE-1 and CE-2 chorus models, ducking delay, delay, reverb, spring reverb and tone stack, linked with series, parallel and stereo routes.*
 
+**Moving a block**: press a block and drag it to another cell; the arrows follow.
+
+![Dragging a block to another cell of the grid and back](docs/img/move_block.gif)
+
+**Drawing an arrow**: drag from a block's output port to another block's input port (here from the Screamer to the delay, then from the reverb to the output).
+
+![Drawing two arrows between ports](docs/img/link_blocks.gif)
+
+*Both animations were recorded from the real web page, served by a local test server with a small demo pedalboard (no board attached), driven by a scripted mouse.*
+
 ## Measured figures
 
 Measured on 2026-10-21 with firmware build `mcore92` on a Raspberry Pi 5 (48 kHz, 4-frame blocks). What was measured and what was only calculated is stated for every number.
