@@ -1,3 +1,8 @@
+<p align="center"><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/logo.png">
+  <img src="docs/img/logo_transparent.png" alt="NAMberry logo" width="360">
+</picture></p>
+
 # NAMberry
 
 A bare-metal guitar multi-effects processor for the **Raspberry Pi 5** with a **Blokas Pisound** audio interface. It runs on [Circle](https://github.com/rsta2/circle) (no Linux), is controlled from a web page over Wi-Fi, and can run Neural Amp Modeler (NAM) captures next to a set of effects, many of them modelled from the schematics of real pedals.
