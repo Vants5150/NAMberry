@@ -3,11 +3,27 @@
   <img src="docs/img/logo_transparent.png" alt="NAMberry logo" width="360">
 </picture></p>
 
+<p align="center">
+  <a href="LICENSE"><img alt="License: GPL-3.0" src="https://img.shields.io/badge/license-GPL--3.0-blue"></a>
+  <img alt="Platform: Raspberry Pi 5 with Pisound" src="https://img.shields.io/badge/platform-Raspberry%20Pi%205%20%2B%20Pisound-c51a4a">
+  <img alt="Bare metal: Circle, no Linux" src="https://img.shields.io/badge/runtime-bare%20metal%20(Circle)-2b8fd0">
+  <img alt="Tests: 35 host steps and 13 page tests passing" src="https://img.shields.io/badge/tests-35%20host%20%2B%2013%20page%20passing-brightgreen">
+  <img alt="Status: experimental" src="https://img.shields.io/badge/status-experimental-orange">
+</p>
+
 # NAMberry
 
 A bare-metal guitar multi-effects processor for the **Raspberry Pi 5** with a **Blokas Pisound** audio interface. It runs on [Circle](https://github.com/rsta2/circle) (no Linux), is controlled from a web page over Wi-Fi, and can run Neural Amp Modeler (NAM) captures next to a set of effects, many of them modelled from the schematics of real pedals.
 
 > **Status: experimental, one-person project.** It was developed and tested on a single board. Read the "Honest limits" in [EFFECTS.md](EFFECTS.md) before trusting any effect to sound like the pedal it is named after.
+
+## How it works
+
+![Signal path: guitar, Pisound, Raspberry Pi 5 running Circle, Pisound output to amp or mixer, with a browser on the side](docs/img/signal_path.svg)
+
+The guitar goes into the Pisound, the Raspberry Pi 5 processes it and the result leaves through the Pisound again. The pedalboard is edited from any browser on the same Wi-Fi network; the browser is not in the audio path.
+
+**Why bare metal.** The firmware runs on [Circle](https://github.com/rsta2/circle) with no operating system, so no scheduler, background service or driver other than the firmware's own competes for the audio core. The figures in "Measured figures" below show what this gives: 1.083 ms calculated guitar-to-amp latency with the default 4-frame blocks, and on the running board 3,788,670 blocks since boot with 0 late and 0 faults. These numbers come from one board; no head-to-head measurement against a Linux setup is published here.
 
 ## What it does
 
@@ -64,6 +80,8 @@ Share of the audio core's time per block (Pi 5, 4-frame blocks, benchmark under 
 
 On the running board with a test preset (one NAM, eleven other blocks, four cores in use): average CPU 24.5 %, peak 30.0 %, no overruns, SoC temperature 57 C (one reading). Worker-core statistics since boot: 3,788,670 blocks, 0 late, 0 faults.
 
+![CPU time of one and two NAM models, ADELnam against the NeuralAudio reference](docs/img/cpu_nam.svg)
+
 ### Space
 
 | What | Size |
@@ -100,6 +118,8 @@ The magnifier button next to the preset name opens an analysis of the preset. **
 ### Harmonizer and the two blocks built around it
 
 **ADELshifter** is a three-voice harmonizer for single notes (diatonic voices that follow a scale, or fixed semitones). Its pitch tracker was reworked: an attack detector limits the analysis window to the new note, the note that is sounding keeps its pitch while its period still fits, and an octave leap without a new attack needs many agreeing readings. On the synthetic bench in `tools/tracker` the notes reported shorter than 50 ms fell from 65 to 13, the note changes from 184 to 133 for 160 real notes and the latency of picked notes from 27 to 18 ms; chords are still not followed as well as single notes. Five presets named "Track 1..5" are made to try it.
+
+![Pitch tracker before and after the rework: notes shorter than 50 ms 65 to 13, note changes 184 to 133, latency of picked notes 27 to 18 ms](docs/img/tracker_before_after.svg)
 
 **ADELshifter Manual** is for when you want to decide every harmony yourself, note by note, and have the block remember it.
 
@@ -145,6 +165,14 @@ A2 WaveNet captures run in the ADELnam engine. Each model's input level is set f
 * microSD card with Circle's boot files and Wi-Fi firmware (see "Not included")
 * A fan on the Pi 5 header is supported (PWM)
 
+<p align="center">
+  <img src="docs/img/hw_front.jpg" alt="The enclosure seen from the front: two jack sockets on a turquoise panel, two knobs and a button on the lid" width="32%">
+  <img src="docs/img/hw_midi.jpg" alt="The enclosure seen from the end: two 5-pin DIN sockets and ventilation slots" width="32%">
+  <img src="docs/img/hw_top.jpg" alt="The lid from above: two knobs and a button" width="32%">
+</p>
+
+*The author's enclosure: two jack sockets on the front panel, two 5-pin DIN sockets and ventilation slots on one end, two knobs and a button on the lid. The firmware's DIN MIDI input is disabled by default (see above); the knobs and the button are not described here because their functions are not documented in this repository.*
+
 ## Building
 
 You need an `aarch64-linux-gnu` cross toolchain (or build on a Pi 5) and Circle.
@@ -184,6 +212,10 @@ Host tests need no board: `tests/run_host_tests.sh` compiles every `tests/test_*
 
 * **Wi-Fi firmware blobs and Circle boot files**: take them from Circle's distribution (Broadcom/Raspberry Pi license, see [NOTICE.md](NOTICE.md)).
 * **NAM models, captures and impulse responses**: bring your own and respect their authors' licenses.
+
+## Contributing
+
+Bug reports, questions and ideas are welcome as [GitHub issues](https://github.com/Vants5150/NAMberry/issues); see [CONTRIBUTING.md](CONTRIBUTING.md) for what helps most. This is a one-person project tested on a single board, so reports that say which board, build (the page shows it) and preset were used are the most useful.
 
 ## License
 

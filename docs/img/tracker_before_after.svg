@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 290" width="860" height="290" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif">
+  <title>ADELshifter pitch tracker, before and after</title>
+  <rect width="860" height="290" rx="14" fill="#f4f6fb" stroke="#d5dbea"/>
+  <text x="30" y="40" font-size="20" font-weight="700" fill="#1b2a4a">Pitch tracker rework, synthetic bench (lower is better)</text>
+  <text x="30" y="62" font-size="14" fill="#4a5878">figures from the bench in tools/tracker; each pair is drawn to the same scale, from zero</text>
+  <g font-size="15" fill="#1b2a4a" font-weight="600" text-anchor="middle">
+    <text x="150" y="94">Notes shorter than 50 ms</text>
+    <text x="430" y="94">Note changes reported</text>
+    <text x="710" y="94">Latency of picked notes</text>
+  </g>
+  <!-- panel 1: 65 -> 13 (scale 1.6 px per unit, max bar 104) -->
+  <rect x="60" y="130" width="40" height="104" rx="4" fill="#9aa6c4"/>
+  <rect x="120" y="213" width="40" height="21" rx="4" fill="#2b8fd0"/>
+  <!-- panel 2: 184 -> 133 (scale 0.565 px per unit, max 104) -->
+  <rect x="340" y="130" width="40" height="104" rx="4" fill="#9aa6c4"/>
+  <rect x="400" y="159" width="40" height="75" rx="4" fill="#2b8fd0"/>
+  <!-- panel 3: 27 -> 18 ms (scale 3.85 px per ms) -->
+  <rect x="620" y="130" width="40" height="104" rx="4" fill="#9aa6c4"/>
+  <rect x="680" y="165" width="40" height="69" rx="4" fill="#2b8fd0"/>
+  <g font-size="15" fill="#1b2a4a" font-weight="700" text-anchor="middle">
+    <text x="80" y="124">65</text><text x="140" y="207">13</text>
+    <text x="360" y="124">184</text><text x="420" y="153">133</text>
+    <text x="640" y="124">27 ms</text><text x="700" y="159">18 ms</text>
+  </g>
+  <g font-size="13" fill="#4a5878" text-anchor="middle">
+    <text x="80" y="254">before</text><text x="140" y="254">after</text>
+    <text x="360" y="254">before</text><text x="420" y="254">after</text>
+    <text x="640" y="254">before</text><text x="700" y="254">after</text>
+  </g>
+  <text x="430" y="278" font-size="13" fill="#4a5878" text-anchor="middle">On chords the tracker is still weaker than on single notes.</text>
+</svg>

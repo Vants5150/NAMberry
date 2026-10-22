@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 300" width="860" height="300" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif">
+  <title>CPU use of the NAM engines</title>
+  <rect width="860" height="300" rx="14" fill="#f4f6fb" stroke="#d5dbea"/>
+  <text x="30" y="40" font-size="20" font-weight="700" fill="#1b2a4a">Audio-core time per block, NAM A2 models (lower is better)</text>
+  <text x="30" y="62" font-size="14" fill="#4a5878">Raspberry Pi 5, 4-frame blocks, benchmark under Linux, mean of a 3 s run</text>
+  <!-- scale 0..30 % = 0..520 px, origin x=170 -->
+  <g stroke="#d5dbea" stroke-width="1">
+    <line x1="170" y1="85" x2="170" y2="260"/>
+    <line x1="343" y1="85" x2="343" y2="260"/>
+    <line x1="517" y1="85" x2="517" y2="260"/>
+    <line x1="690" y1="85" x2="690" y2="260"/>
+  </g>
+  <g font-size="13" fill="#4a5878" text-anchor="middle">
+    <text x="170" y="278">0 %</text><text x="343" y="278">10 %</text><text x="517" y="278">20 %</text><text x="690" y="278">30 %</text>
+  </g>
+  <g font-size="16" fill="#1b2a4a" text-anchor="end" font-weight="600">
+    <text x="156" y="122">1 model</text>
+    <text x="156" y="212">2 models</text>
+  </g>
+  <!-- 1 model -->
+  <rect x="170" y="94" width="95" height="24" rx="4" fill="#2b8fd0"/>
+  <text x="274" y="112" font-size="14" fill="#1b2a4a">5.5 %  ADELnam</text>
+  <rect x="170" y="124" width="230" height="24" rx="4" fill="#9aa6c4"/>
+  <text x="409" y="142" font-size="14" fill="#1b2a4a">12.9 - 13.7 %  NeuralAudio reference</text>
+  <!-- 2 models -->
+  <rect x="170" y="184" width="194" height="24" rx="4" fill="#2b8fd0"/>
+  <text x="373" y="202" font-size="14" fill="#1b2a4a">11.2 %  ADELnam</text>
+  <rect x="170" y="214" width="489" height="24" rx="4" fill="#9aa6c4"/>
+  <text x="668" y="232" font-size="14" fill="#1b2a4a">27.4 - 28.9 %</text>
+</svg>
