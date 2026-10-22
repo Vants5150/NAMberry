@@ -50,7 +50,15 @@ The guitar goes into the Pisound, the Raspberry Pi 5 processes it and the result
 
 ![Drawing two arrows between ports](docs/img/link_blocks.gif)
 
-*Both animations were recorded from the real web page, served by a local test server with a small demo pedalboard (no board attached), driven by a scripted mouse.*
+**Removing a block**: press and hold a block for about 0.6 s; a copy button and a trash button appear over it. Tap the trash to remove it (its arrows go with it).
+
+![Long press on a block, then the trash button removes it](docs/img/trash_block.gif)
+
+**Copying and pasting a block**: the same long press, then the copy button. Long-press an empty cell and a paste button appears; the copy keeps the type and the settings of the original and is pasted as a new block with no arrows.
+
+![Copying a block and pasting it into an empty cell](docs/img/copy_paste_block.gif)
+
+*All four animations were recorded from the real web page, served by a local test server with a small demo pedalboard (no board attached), driven by a scripted mouse.*
 
 ## Measured figures
 
