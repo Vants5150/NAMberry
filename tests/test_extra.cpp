@@ -312,6 +312,25 @@ int main ()
 		CHECKM (Rms (sL, 48000, 96000) > 0.1 && Rms (sR, 48000, 96000) > 0.1, "secondhand Hand | Hand: a hand is silent");
 		CHECK (Finite (sL, 2.0f) && Finite (sR, 2.0f));
 		delete fx2;
+		// a steady note is one note: the attack detector must not fire again (measured on the Pi: an energy detector over 32 samples fired every 30 ms on any tone below 400 Hz).
+		// With a large looseness a new attack would change the delay, so the phase of the hand at the note's frequency would jump between two windows
+		for (float f : {82.4f, 110.0f, 220.0f, 330.0f, 880.0f})
+		{
+			Defaults (type); SetP (type, "mode", 0.0f); SetP (type, "loose1", 20.0f); SetP (type, "drift", 0.0f); SetP (type, "pick", 0.0f);
+			SetP (type, "dyn", 0.0f); SetP (type, "tone", 0.0f); SetP (type, "tonevar", 0.0f);
+			CFx *fx3 = FxCreate (type, FS);
+			std::vector<float> tL, tR;
+			RunSine (fx3, f, 0.3f, 48000 * 4, tL, tR, 1);
+			auto Phase = [&] (unsigned s)
+			{
+				double re = 0, im = 0;
+				for (unsigned i = s; i < s + 9600; i++) { const double w = 6.283185307 * f * i / FS; re += tR[i] * cos (w); im += -tR[i] * sin (w); }
+				return atan2 (im, re);
+			};
+			double dp = Phase (60000) - Phase (150000); while (dp > 3.14159265) dp -= 6.2831853; while (dp < -3.14159265) dp += 6.2831853;
+			CHECKM (fabs (dp) < 0.15, "secondhand: a steady %g Hz note changed the hand's delay (phase step %g rad)", f, dp);
+			delete fx3;
+		}
 	}	{	// ADELshifter Manual: a note with no saved setting uses the voice's semitones; with a saved setting for that pitch class the saved semitones are used
 		const unsigned type = FxShifterManual;
 		Defaults (type); SetP (type, "dry", -60.0f); SetP (type, "v1on", 1.0f); SetP (type, "v1semi", 12.0f); SetP (type, "v1level", 0.0f); SetP (type, "v1pan", 0.0f);

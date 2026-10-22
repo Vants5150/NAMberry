@@ -367,7 +367,7 @@ inline const TFxParam g_XSecondHand[] = {
 	XKG(3, "dyn", "Dynamics", "dB", 0.0f, 6.0f, 0.1f, 1.5f, "How much louder or softer each note can be than the others (a different touch)."),
 	XKG(3, "tone", "Tone", "", -100.0f, 100.0f, 1.0f, 0.0f, "Tilts the balance of the second guitarist's tone: dark on the left, bright on the right (another pickup, another pick)."),
 	XKG(3, "tonevar", "Tone variation", "%", 0.0f, 100.0f, 1.0f, 25.0f, "How much the tone changes from one note to the next."),
-	XKG(3, "pick", "Pick noise", "%", 0.0f, 100.0f, 1.0f, 20.0f, "A short burst of pick and string noise at every new note.")};inline const char *const g_XSmGroups[] = {"Main", "Voice 1", "Voice 2", "Voice 3", "Note map", "Meters"};
+	XKG(3, "pick", "Pick noise", "%", 0.0f, 100.0f, 1.0f, 0.0f, "A short burst of pick and string noise at every new note.")};inline const char *const g_XSmGroups[] = {"Main", "Voice 1", "Voice 2", "Voice 3", "Note map", "Meters"};
 inline const char *const g_XSmTrack[] = {"Fast", "Normal", "Smooth"};
 #define XTG(grp, key, label, df, hint)	{key, label, "", 0.0f, 1.0f, 1.0f, df, 2, 0, grp, 0, 0, hint}
 #define XOG(grp, key, label, unit, mn, mx, st, hint)	{key, label, unit, mn, mx, st, 0.0f, 3, 0, grp, 0, 0, hint}

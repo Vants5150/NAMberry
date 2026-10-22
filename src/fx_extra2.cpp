@@ -537,7 +537,7 @@ public:
 	{
 		m_in = new CLine (8192);
 		m_nTake = 0xFFFFFFFFu;
-		m_nHop = 0; m_nHold = 0; m_fE = 0.0f; m_fEP = 0.0f; m_bInit = false;
+		m_nHop = 0; m_nHold = 0; m_fE = 0.0f; m_fEF = 0.0f; m_fEP = 0.0f; m_bArmed = true; m_bInit = false;
 		for (unsigned h = 0; h < 2; h++) Reset (h, 1u + h);
 	}
 	~CSecondHand (void) { delete m_in; }
@@ -548,7 +548,7 @@ public:
 		const unsigned nMode = pP[0] > 0.5f ? 1 : 0, nHands = nMode ? 2 : 1;
 		const float fLevel = DbToLin (Clampf (pP[1], -24.0f, 12.0f));
 		const float fThr = DbToLin (Clampf (pP[2], -70.0f, -30.0f));
-		const float fThr2 = fThr * fThr * 32.0f;
+		const float hop = 32.0f / m_fRate;
 		const unsigned nTake = (unsigned) Clampf (pP[3], 0.0f, 99.0f);
 		if (nTake != m_nTake)
 		{
@@ -588,15 +588,23 @@ public:
 		{
 			const float x = *pMono ? pL[j] : 0.5f * (pL[j] + pR[j]);
 			m_in->Put (x);
-			m_fE += x * x;
+			{	// peak of the hop (32 samples). Energy over such a short window depends on the phase of the waveform (a note below about 400 Hz has a period longer than the hop), so it cannot be used to see an attack
+				const float ax = Absf (x);
+				if (ax > m_fE) m_fE = ax;
+			}
 			if (++m_nHop >= 32)
 			{
 				m_nHop = 0;
 				if (m_nHold > 0) m_nHold--;
-				const float eP = m_fEP > fThr2 * 0.05f ? m_fEP : fThr2 * 0.05f;
-				if (m_fE > fThr2 && m_fE > 3.0f * eP && m_nHold == 0)
+				// attack = the fast envelope (peak detector, 20 ms release) jumps to more than twice the slow one (100 ms), above the threshold, after it had settled back below 1.5 times
+				const float fFast = m_fEF * (1.0f - hop / 0.020f);
+				m_fEF = m_fE > fFast ? m_fE : fFast;
+				m_fEP += (hop / 0.100f) * (m_fEF - m_fEP);
+				if (m_fEF < 1.5f * m_fEP) m_bArmed = true;
+				if (m_bArmed && m_nHold == 0 && m_fEF > fThr && m_fEF > 2.0f * m_fEP)
 				{
-					m_nHold = 45;
+					m_bArmed = false;
+					m_nHold = (unsigned) (0.080f * fs / 32.0f);
 					for (unsigned h = 0; h < nHands; h++)
 					{
 						THand &H = m_h[h];
@@ -606,12 +614,11 @@ public:
 						H.dNew = Clampf (off[h] + loose[h] * H.rD, 0.3f, 95.0f) * 0.001f * fs;
 						H.xf = 0.0f;
 						H.nEnv = 1.0f;
-						H.nAmp = pick * 0.4f * (0.5f + 0.5f * rn) * DspSqrtF (m_fE * (1.0f / 32.0f));
+						H.nAmp = pick * 0.4f * (0.5f + 0.5f * rn) * 0.7f * m_fEF;
 						H.gainT = DbToLin (dyn * H.rG);
 						H.toneT = Clampf ((tone + tvar * H.rT) * 0.01f, -1.0f, 1.0f);
 					}
 				}
-				m_fEP = m_fE;
 				m_fE = 0.0f;
 			}
 			float out[2] = {x, x};
@@ -668,8 +675,8 @@ private:
 	CLine *m_in;
 	THand m_h[2];
 	unsigned m_nTake, m_nHop, m_nHold;
-	float m_fE, m_fEP;
-	bool m_bInit;
+	float m_fE, m_fEF, m_fEP;
+	bool m_bInit, m_bArmed;
 };
 }	// namespace
 

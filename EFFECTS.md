@@ -688,6 +688,8 @@ A harmonizer whose three voices you build by ear and the block remembers for eve
 
 Simulates a second guitarist playing the same notes or chords like an overdub: timing, pitch wander, touch, tone and pick noise change from note to note. Two outputs: clean | hand, or hand 1 | hand 2, so that each can feed its own NAM (three NAMs from one block when the clean guitar is taken straight from the input). A fixed detune is not possible without pitch-synchronous processing; the pitch drifts sharp and flat instead.
 
+**Known limits (2026-10-22).** The attack detector is a fast peak envelope against a slow one (an attack is a jump to more than twice the slow level, with an 80 ms hold). The first version measured energy over 32 samples, which depends on the phase of a low note, and fired about every 30 ms on any tone (150 times in 5 s on a steady 110 Hz sine); this made the block crackle and sound like a poor chorus. The fix is measured on real DI recordings (1.4 to 4.4 triggers per second, one trigger on a steady tone) and covered by a test, but the sound has not been judged good by ear yet: with the pitch drift at zero each hand is a delayed copy of the guitar, which can still sound like a slapback or a weak chorus. A per-note random detune made with the pitch shifter is the option under consideration. Pick noise now defaults to 0 (at 20 % it added 1 to 6 dB of high-frequency energy on real recordings).
+
 
 | Control | Range | What it does |
 |---|---|---|
