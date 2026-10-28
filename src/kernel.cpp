@@ -122,6 +122,13 @@ CKernel::CKernel (void)
 	m_bSafeMode (FALSE),
 	m_pUsbMidi (0),
 	m_nMidiPnpAt (0),
+#ifdef USB_SERIAL_TEST
+	m_pUsbSerial (0),
+	m_nSerAt (0),
+	m_nSerTxAt (0),
+	m_pControl (0),
+	m_pRpcBuf (0),
+#endif
 	m_pDin (0),
 	m_pFeat (0),
 	m_nSyncedBpm10 (0),
@@ -2545,6 +2552,198 @@ void CKernel::MidiRemovedHandler (CDevice *pDevice, void *pContext)
 	p->m_MidiMon.Add ('i', "USB MIDI disconnected");
 }
 
+#ifdef USB_SERIAL_TEST
+void CKernel::SerialRemovedHandler (CDevice *pDevice, void *pContext)
+{
+	(void) pDevice;
+	CKernel *p = (CKernel *) pContext;
+	p->m_pUsbSerial = 0;
+	p->m_Rpc = CSerialRpc ();
+	p->m_MidiMon.Add ('i', "USB serial disconnected");
+}
+
+// sends a buffer over the serial link in small writes (the write of the USB serial driver is synchronous)
+static unsigned s_nSerWrites = 0, s_nSerWriteMaxUs = 0;		// timing of the writes of the last reply, shown in the MIDI monitor
+static boolean SerialSendAll (CUSBSerialDevice *pS, const void *pData, unsigned nLen)
+{
+	const u8 *p = (const u8 *) pData;
+	while (nLen > 0)
+	{
+		const unsigned n = nLen > 256 ? 256 : nLen;
+		const unsigned nT0 = CTimer::Get ()->GetClockTicks ();
+		const int nDone = pS->Write (p, n);
+		const unsigned nUs = CTimer::Get ()->GetClockTicks () - nT0;
+		s_nSerWrites++;
+		if (nUs > s_nSerWriteMaxUs)
+		{
+			s_nSerWriteMaxUs = nUs;
+		}
+		if (nDone <= 0)
+		{
+			return FALSE;
+		}
+		p += (unsigned) nDone;
+		nLen -= (unsigned) nDone;
+	}
+	return TRUE;
+}
+
+// sends a reply body in blocks of 4096 bytes and waits for a 'K' from the display after each block but the last: the USB serial receive queue of the ESP32 drops
+// bytes when it is full, and the display redraws the screen between reads (the board sent 109806 bytes in 171 ms and the display never got them all)
+static boolean SerialSendBody (CUSBSerialDevice *pS, const u8 *pData, unsigned nLen)
+{
+	u8 Junk[16];
+	while (pS->Read (Junk, sizeof Junk) > 0)
+	{
+		// stale bytes
+	}
+	while (nLen > 0)
+	{
+		const unsigned n = nLen > 4096 ? 4096 : nLen;
+		if (!SerialSendAll (pS, pData, n))
+		{
+			return FALSE;
+		}
+		pData += n;
+		nLen -= n;
+		if (nLen == 0)
+		{
+			break;
+		}
+		boolean bAck = FALSE;
+		for (unsigned t = 0; t < 1500 && !bAck; t++)
+		{
+			u8 c;
+			if (pS->Read (&c, 1) > 0)
+			{
+				bAck = c == 'K';
+			}
+			else
+			{
+				CScheduler::Get ()->MsSleep (1);
+			}
+		}
+		if (!bAck)
+		{
+			return FALSE;
+		}
+	}
+	return TRUE;
+}
+
+// link with the ESP32 touch display (USB CDC serial), see serialrpc.h:
+//  - a request line "Q <id> <G|P> <path> [<form>]" is served by the same code as the web page (CControl::GetContent) and answered with "A <id> <status> <length>\n" and the body;
+//  - any other complete line is a link test word: it is shown in the MIDI monitor and answered ("pong N <ms>" to "ping N", "ack <text>" otherwise);
+//  - once a second the board also sends "NB hello <ms>".
+void CKernel::SerialTick (unsigned nMs)
+{
+	CUSBSerialDevice *pS = m_pUsbSerial;
+	if (pS == 0)
+	{
+		if (!m_bSafeMode && m_nNetStage >= 1 && nMs - m_nSerAt >= 1000)
+		{
+			m_nSerAt = nMs;
+			if (m_pUsbMidi != 0)
+			{
+				m_USBHCI.UpdatePlugAndPlay ();		// the MIDI lookup does it only while no MIDI device is connected
+			}
+			CUSBSerialDevice *pDev = (CUSBSerialDevice *) CDeviceNameService::Get ()->GetDevice ("utty1", FALSE);
+			if (pDev != 0)
+			{
+				pDev->RegisterRemovedHandler (SerialRemovedHandler, this);
+				m_Rpc = CSerialRpc ();
+				m_nSerTxAt = nMs;
+				m_pUsbSerial = pDev;
+				m_MidiMon.Add ('i', "USB serial connected");
+			}
+		}
+		return;
+	}
+
+	u8 Buf[48];
+	for (unsigned nGuard = 0; nGuard < 4; nGuard++)
+	{
+		const int n = pS->Read (Buf, sizeof Buf);
+		if (n <= 0)
+		{
+			break;
+		}
+		for (int i = 0; i < n; i++)
+		{
+			if (!m_Rpc.Feed ((char) Buf[i]))
+			{
+				continue;
+			}
+			unsigned nId;
+			boolean bPost;
+			const char *pPath;
+			const char *pQuery;
+			if (m_Rpc.Parse (&nId, &bPost, &pPath, &pQuery))
+			{
+				static const unsigned RpcBufSize = 196608;		// the size of the reply buffer of the web server
+				if (m_pRpcBuf == 0)
+				{
+					m_pRpcBuf = new u8[RpcBufSize];
+				}
+				char Form[SRPC_MAX_LINE + 40];
+				const char *pForm = pQuery;
+				if (bPost)
+				{
+					if (!CSerialRpc::BuildForm (Form, sizeof Form, m_Ctl.Token, pQuery))
+					{
+						Form[0] = 0;
+					}
+					pForm = Form;
+				}
+				unsigned nLen = RpcBufSize;
+				const char *pType = 0;
+				THTTPStatus Status = HTTPInternalServerError;
+				if (m_pControl != 0 && m_pRpcBuf != 0)
+				{
+					Status = m_pControl->GetContent (pPath, bPost ? "" : pQuery, bPost ? pForm : "", m_pRpcBuf, &nLen, &pType);
+				}
+				if (Status != HTTPOK)
+				{
+					nLen = 0;
+				}
+				char Head[48];
+				const unsigned nHead = CSerialRpc::BuildHeader (Head, sizeof Head, nId, (unsigned) Status, nLen);
+				s_nSerWrites = 0;
+				s_nSerWriteMaxUs = 0;
+				const unsigned nSendT0 = CTimer::Get ()->GetClockTicks ();
+				const boolean bSent = nHead != 0 && SerialSendAll (pS, Head, nHead) && (nLen == 0 || SerialSendBody (pS, m_pRpcBuf, nLen));
+				CString Timing;
+				Timing.Format ("SER: %s %s %u B, %u writes, %u ms total, max write %u us", bSent ? "sent" : "NOT sent", pPath, nLen,
+					       s_nSerWrites, (CTimer::Get ()->GetClockTicks () - nSendT0) / 1000, s_nSerWriteMaxUs);
+				m_MidiMon.Add ('i', (const char *) Timing);
+				continue;
+			}
+			CString Show;
+			Show.Format ("SER< %s", m_Rpc.Line ());
+			m_MidiMon.Add ('i', (const char *) Show);
+			CString Reply;
+			if (strncmp (m_Rpc.Line (), "ping ", 5) == 0)
+			{
+				Reply.Format ("pong %s %u\n", m_Rpc.Line () + 5, nMs);
+			}
+			else
+			{
+				Reply.Format ("ack %s\n", m_Rpc.Line ());
+			}
+			pS->Write ((const char *) Reply, strlen ((const char *) Reply));
+		}
+	}
+
+	if (nMs - m_nSerTxAt >= 1000)
+	{
+		m_nSerTxAt = nMs;
+		CString Hello;
+		Hello.Format ("NB hello %u\n", nMs);
+		pS->Write ((const char *) Hello, strlen ((const char *) Hello));
+	}
+}
+#endif
+
 // sends MIDI bytes to the controller (USB; the Pisound's DIN socket is phase 4) and shows them in the monitor
 void CKernel::MidiSend (const u8 *pData, unsigned nLen)
 {
@@ -2926,6 +3125,10 @@ void CKernel::MidiTick (void)
 			m_MidiMon.Add ('i', "USB MIDI connected");
 		}
 	}
+#endif
+
+#ifdef USB_SERIAL_TEST
+	SerialTick (nMs);
 #endif
 
 	MidiDinTick (nMs, nUs);
@@ -4746,7 +4949,11 @@ TShutdownMode CKernel::Run (void)
 			}
 			m_Ctl.Token[12] = 0;
 		}
-		new CControl (&m_Net, &m_Ctl);
+	#ifdef USB_SERIAL_TEST
+	m_pControl = new CControl (&m_Net, &m_Ctl);
+#else
+	new CControl (&m_Net, &m_Ctl);
+#endif
 		CodeCheckRun (&m_Logger, "after the web server");
 		if (m_bApMode) { ApLogPut ("web server started"); }
 		new CmDNSDaemon (&m_Net);		// answers at http://namberry5.local (mDNS / Bonjour)

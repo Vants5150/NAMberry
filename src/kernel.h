@@ -26,6 +26,7 @@
 #include <circle/types.h>
 #include "config.h"
 #include <circle/usb/usbmidi.h>
+#include <circle/usb/usbserial.h>
 #include "midi.h"
 #include "pisounddin.h"
 #include "ftools.h"
@@ -33,6 +34,7 @@
 #include "ota.h"
 #include "params.h"
 #include "control.h"
+#include "serialrpc.h"
 #include <circle/gpiopin.h>
 #include "board.h"
 #include "graph.h"
@@ -280,6 +282,15 @@ private:
 	CTapTempo		m_MidiTap;
 	CUSBMIDIDevice		*volatile m_pUsbMidi;
 	unsigned		m_nMidiPnpAt;
+#ifdef USB_SERIAL_TEST
+	CUSBSerialDevice	*volatile m_pUsbSerial;	// test link with the ESP32 touch display (USB CDC serial); compiled only with -DUSB_SERIAL_TEST
+	unsigned		m_nSerAt, m_nSerTxAt;
+	CSerialRpc		m_Rpc;		// line protocol with the ESP32 display (serialrpc.h)
+	CControl			*m_pControl;	// the web server object: its GetContent() also serves the requests that come over the serial link
+	u8				*m_pRpcBuf;	// reply buffer for those requests (allocated at the first one)
+	void SerialTick (unsigned nMs);
+	static void SerialRemovedHandler (CDevice *pDevice, void *pContext);
+#endif
 	unsigned		m_nSyncedBpm10;	// last tempo (tenths of bpm) applied to the ADEL delays
 	CFeatures		*m_pFeat;		// service functions with a switch (all off at startup)
 	void FeatInit (void);

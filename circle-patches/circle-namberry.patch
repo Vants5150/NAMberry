@@ -362,3 +362,65 @@ index 490df6d..1d0ee70 100644
  #endif
  }
  
+diff --git a/include/circle/usb/usbfunction.h b/include/circle/usb/usbfunction.h
+index add4683..d12b10b 100644
+--- a/include/circle/usb/usbfunction.h
++++ b/include/circle/usb/usbfunction.h
+@@ -59,6 +59,8 @@ public:
+ 	// if device has been detected by vendor/product ID
+ 	boolean SelectInterfaceByClass (u8 uchClass, u8 uchSubClass, u8 uchProtocol,
+ 					unsigned nMinEndpoints = 0);
++	// like SelectInterfaceByClass(), but the interface may have either of two subclass values (the CDC data interface of the ESP32-S3 USB Serial/JTAG has subclass 2 instead of 0)
++	boolean SelectInterfaceByClassSub (u8 uchClass, u8 uchSubClass1, u8 uchSubClass2, u8 uchProtocol);
+ 
+ 	u8 GetInterfaceNumber (void) const;
+ 	u8 GetInterfaceClass (void) const;
+diff --git a/lib/usb/usbfunction.cpp b/lib/usb/usbfunction.cpp
+index 2cb3341..0d3764d 100644
+--- a/lib/usb/usbfunction.cpp
++++ b/lib/usb/usbfunction.cpp
+@@ -184,6 +184,31 @@ boolean CUSBFunction::SelectInterfaceByClass (u8 uchClass, u8 uchSubClass, u8 uc
+ 	return FALSE;
+ }
+ 
++boolean CUSBFunction::SelectInterfaceByClassSub (u8 uchClass, u8 uchSubClass1, u8 uchSubClass2, u8 uchProtocol)
++{
++	assert (m_pInterfaceDesc != 0);
++	assert (m_pConfigParser != 0);
++	assert (m_pDevice != 0);
++
++	do
++	{
++		if (   m_pInterfaceDesc->bInterfaceClass == uchClass
++		    && (   m_pInterfaceDesc->bInterfaceSubClass == uchSubClass1
++			|| m_pInterfaceDesc->bInterfaceSubClass == uchSubClass2)
++		    && m_pInterfaceDesc->bInterfaceProtocol == uchProtocol)
++		{
++			return TRUE;
++		}
++
++		// skip to next interface in interface enumeration in class CDevice
++		m_pDevice->GetDescriptor (DESCRIPTOR_INTERFACE);
++	}
++	while ((m_pInterfaceDesc = (TUSBInterfaceDescriptor *)
++				m_pConfigParser->GetDescriptor (DESCRIPTOR_INTERFACE)) != 0);
++
++	return FALSE;
++}
++
+ u8 CUSBFunction::GetInterfaceNumber (void) const
+ {
+ 	assert (m_pInterfaceDesc != 0);
+diff --git a/lib/usb/usbserialcdc.cpp b/lib/usb/usbserialcdc.cpp
+index cd21602..f0b2875 100644
+--- a/lib/usb/usbserialcdc.cpp
++++ b/lib/usb/usbserialcdc.cpp
+@@ -47,7 +47,7 @@ static const char From[] = "uttycdc";
+ CUSBSerialCDCDevice::CUSBSerialCDCDevice (CUSBFunction *pFunction)
+ :	CUSBSerialHostDevice (pFunction),
+ 	m_ucCommunicationsInterfaceNumber (GetInterfaceNumber ()),
+-	m_bInterfaceOK (SelectInterfaceByClass (10, 0, 0))
++	m_bInterfaceOK (SelectInterfaceByClassSub (10, 0, 2, 0))
+ {
+ }
+ 

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 250" role="img" aria-labelledby="t d" font-family="sans-serif" font-size="14">
+<title id="t">Live Display link</title>
+<desc id="d">The ESP32-S3 touch display is connected with a USB-C cable to the Raspberry Pi 5 running the NAMberry firmware. The display's Wi-Fi is used only to update it and to read a status page.</desc>
+<rect x="20" y="40" width="190" height="130" rx="10" fill="#e8f2fb" stroke="#2b8fd0" stroke-width="2"/>
+<text x="115" y="70" text-anchor="middle" font-weight="bold" fill="#0b3a5c">Live Display</text>
+<text x="115" y="94" text-anchor="middle" fill="#0b3a5c">ESP32-S3, 2.8" touch</text>
+<text x="115" y="114" text-anchor="middle" fill="#0b3a5c">ILI9341 240 x 320</text>
+<text x="115" y="134" text-anchor="middle" fill="#0b3a5c">stage, knobs, presets</text>
+<text x="115" y="154" text-anchor="middle" fill="#0b3a5c">(nb_display.ino)</text>
+<rect x="470" y="40" width="190" height="130" rx="10" fill="#fbeaf0" stroke="#c51a4a" stroke-width="2"/>
+<text x="565" y="70" text-anchor="middle" font-weight="bold" fill="#5c0b25">Raspberry Pi 5</text>
+<text x="565" y="94" text-anchor="middle" fill="#5c0b25">NAMberry firmware</text>
+<text x="565" y="114" text-anchor="middle" fill="#5c0b25">Circle, bare metal</text>
+<text x="565" y="134" text-anchor="middle" fill="#5c0b25">USB host + serialrpc</text>
+<text x="565" y="154" text-anchor="middle" fill="#5c0b25">(MIDI task, not audio)</text>
+<line x1="210" y1="105" x2="470" y2="105" stroke="#444" stroke-width="3"/>
+<text x="340" y="92" text-anchor="middle" fill="#222">USB-C cable: data and power</text>
+<text x="340" y="126" text-anchor="middle" fill="#222" font-size="12">Q id G /status  &#8594;  A id 200 length + JSON</text>
+<text x="340" y="144" text-anchor="middle" fill="#222" font-size="12">4096-byte blocks, K after each</text>
+<path d="M115 170 L115 215" stroke="#888" stroke-width="2" stroke-dasharray="6 4" fill="none"/>
+<text x="130" y="205" fill="#555" font-size="12">Wi-Fi: only firmware updates (ArduinoOTA) and a status page</text>
+</svg>

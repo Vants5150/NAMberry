@@ -37,6 +37,16 @@ What follows from it, as a reading of those facts and not legal advice:
 * **Wi-Fi firmware blobs** (`brcmfmac*` files from Circle's `boot/` and `addon/wlan/firmware`): Broadcom/Raspberry Pi license (`LICENCE.broadcom`), redistribution only in binary form and only for use with Raspberry Pi devices. They must be taken from Circle's own distribution when preparing the SD card.
 * **NAM models, captures and cabinet impulse responses**: not included. Models you add to the SD card keep the license chosen by their authors (the web page can store an author/license note next to every model).
 
+## Live Display firmware (ESP32-S3), used when building it, not distributed here
+
+`display/nb_display/nb_display.ino` and its helpers are written for this project (GPL-3.0). Building them needs, from the Arduino ecosystem (none of it is copied into this repository):
+
+* the [arduino-esp32](https://github.com/espressif/arduino-esp32) core 3.3.x (Espressif; the one file checked, `HWCDC.cpp`, is Apache-2.0, other files carry their own licenses: see the core's repository) and its WiFi, WebServer, ArduinoOTA and Preferences libraries;
+* [TFT_eSPI](https://github.com/Bodmer/TFT_eSPI) 2.5.43 (Bodmer; its `license.txt` says it started from Adafruit's MIT-licensed ILI9341 library and contains functions from Adafruit_GFX under the BSD license);
+* [ArduinoJson](https://arduinojson.org/) 7.x (B. Blanchon, MIT).
+
+`display/nb_display/User_Setup_NB.h` is a list of settings (pins and options found on the board), not a copy of Freenove's setup file. The Freenove FNK0104B is a product of its maker; this project is not affiliated with or endorsed by Freenove or Espressif.
+
 ## Used only for testing, not part of the firmware
 
 * [NeuralAudio](https://github.com/mikeoliphant/NeuralAudio) (M. Oliphant, MIT) with [NeuralAmpModelerCore](https://github.com/sdatkinson/NeuralAmpModelerCore) (S. Atkinson, MIT), [RTNeural](https://github.com/jatinchowdhury18/RTNeural) and math_approx (J. Chowdhury, BSD-3-Clause), Eigen and nlohmann/json: used by the helper tools to compare the output of the ADELnam engine against the reference implementation. No source of these projects is compiled into the firmware (the Makefile does not reference them). The ADELnam engine (`adelnam_engine.hpp`) is written for this project; it reads the compact `.adn` format produced by `nam2adn.py` from standard `.nam` files.

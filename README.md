@@ -35,6 +35,7 @@ The guitar goes into the Pisound, the Raspberry Pi 5 processes it and the result
 * **MIDI** over USB (DIN input is present in the code but disabled by default because it is untested on hardware).
 * **Updates over Wi-Fi** (signed with an HMAC key stored on the SD card, `ota.key`), a **fallback WPA2 access point** when the home network is missing, and a **concert mode** that boots without any network.
 * **DI recorder**: records the raw input (24-bit stereo) into memory and downloads it as a WAV file from the page.
+* **Live Display**: an optional wired touch display (ESP32-S3, one USB cable, no Wi-Fi needed while playing) to see and switch blocks, change presets, edit parameters and NAM models, and build a simple preset. See [docs/live-display.md](docs/live-display.md).
 
 ## Screenshots
 
@@ -176,12 +177,22 @@ A2 WaveNet captures run in the ADELnam engine. Each model's input level is set f
 * **DI recorder**: records the raw guitar input (24-bit stereo) in memory, up to about 10 minutes, and downloads it as a WAV file; several takes can be added one after the other (a small .csv file says where each starts). It is meant to build test material, for example for a note tracker.
 * **Measurement tools** as blocks: `ADELSendSweep` (sweep, guitar notes, chord or pink noise at the press of a button) and `ADELphase` (polarity, delay, all-pass and phase measurement between two channels).
 * **Service functions** that can be switched on and off from the page: hum, rumble, limiter, mono, air, saturation, click, RTA, tuner and meter.
+
+## Live Display
+
+A small touch display for playing live, connected to the Pi's USB port with one cable: the **Stage** screen shows the preset and the blocks as coloured tiles (tap to switch a block, hold to open its knobs, `<` `>` to change preset, level bars at the sides), the knobs and an editor with a slider and an Undo button change the parameters and the NAM model, and a "+" in the preset list builds a simple one-lane preset and saves it. The display is a Freenove ESP32-S3 2.8" (FNK0104B); its firmware is in `display/`, it is updated over Wi-Fi, and the screen can be rotated to landscape.
+
+![The Live Display link: display on a USB cable to the Raspberry Pi 5](docs/img/live_display_link.svg)
+
+The hardware specification (pins, screen, touch, what was found and what was not), the serial protocol and its flow control, how to build and load both sides, the measured figures and the limits are in **[docs/live-display.md](docs/live-display.md)**. It was tried on one unit; the audio latency with the display attached has not been measured again.
+
 ## Hardware
 
 * Raspberry Pi 5
 * Blokas Pisound (I2S audio, MIDI)
 * microSD card with Circle's boot files and Wi-Fi firmware (see "Not included")
 * A fan on the Pi 5 header is supported (PWM)
+* Optional: the Live Display (Freenove ESP32-S3 2.8" touch display, one USB-C cable), see above
 
 <p align="center">
   <img src="docs/img/hw_front.jpg" alt="The enclosure seen from the front: two jack sockets on a turquoise panel, two knobs and a button on the lid" width="32%">
@@ -202,7 +213,7 @@ You need an `aarch64-linux-gnu` cross toolchain (or build on a Pi 5) and Circle.
    git checkout 7a81e1b480fe7d19fc1fc695b89bff0a0848f44b
    git apply /path/to/NAMberry/circle-patches/circle-namberry.patch
    ```
-   The patch contains the changes made to Circle (RP1 I2S/DMA buffer alignment and cache handling, Wi-Fi access point support, exception-handler diagnostics, `ARM_ALLOW_MULTI_CORE` enabled and `MAX_TASKS` raised to 48).
+   The patch contains the changes made to Circle (RP1 I2S/DMA buffer alignment and cache handling, Wi-Fi access point support, exception-handler diagnostics, `ARM_ALLOW_MULTI_CORE` enabled and `MAX_TASKS` raised to 48, and the USB CDC driver change needed by the Live Display).
 2. In Circle's `Config.mk` set `PREFIX64 = aarch64-linux-gnu-`, `AARCH = 64`, `RASPPI = 5`, then build Circle and the add-ons used by the Makefile (`addon/wlan`, `addon/fatfs`, `addon/SDCard`, `addon/tftpfileserver`, `lib`).
 3. Copy this repository to `circle/addon/wlan/sample/pisound-wifi-test`.
 4. Copy `config_local.h.example` to `config_local.h` and put the address of your PC (syslog and OTA).
@@ -216,6 +227,7 @@ config_local.h.example  copy to config_local.h and edit
 src/                  the firmware: web server, pedalboard engine, effects (fx_*.cpp), MIDI, updates
 src/adel/             the DSP engines of the ADEL family (reverb, delay, harmonizer, ...)
 src/fxshim/           small replacements of the C++ library headers used by the engines on the bare-metal side
+display/              the Live Display: firmware (nb_display.ino), bring-up sketches, a test tool
 tests/                host tests (test_*.cpp), web page tests (test_*.js), host_shim/
 tools/                nam2adn.py (NAM to .adn), block_presets.py (block settings), tracker/ (pitch tracker bench), mkpagegz.py
 docs/                 screenshots and the sources of the block settings
