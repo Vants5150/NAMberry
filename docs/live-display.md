@@ -28,6 +28,20 @@ A small wired touch display for playing live: it shows the preset and its blocks
 
 The number of tiles and knobs per page follows the screen size (8 tiles per page on the 2.8" in landscape; 24 on the 4.0" as the layout computes it, not counted on the screen).
 
+### Photos of the 4.0" display (landscape)
+
+![The Stage screen: the preset "Money solo 1" with eight blocks as tiles](img/live_display_4in_stage.jpg)
+
+*Stage: the preset name with the `<` `>` buttons, the blocks as tiles (NAM in teal, effects blue, delay and reverb amber), Presets / Cfg and the page number below. A name wider than a tile is cut ("ADELFuz zFaceRe"), and the LED can cover its last letter.*
+
+![The Stage screen of a preset marked with an asterisk (unsaved changes), with six tiles and a level bar at the left edge](img/live_display_4in_stage_grid.jpg)
+
+*The same screen for a preset with unsaved changes (the asterisk after its name); the bar at the left edge is the level of the left output.*
+
+![The knobs of the ADELSendSweep block: Play, Signal, Level, Mute Input, Repeat and Mute Output](img/live_display_4in_knobs.jpg)
+
+*Knobs: the parameters of one block; choices and switches (Play, Signal, Mute) show their value in the centre of the arc, numbers show the number. The ON pill switches the block; the footer goes back to the Stage and to the previous or next block.*
+
 Not done from the display: drawing or removing arrows, moving blocks, deleting or renaming presets, **saving** the edited preset (parameter changes act on the sound at once but are stored only when you save from the web page; the preset name shows `*` while it holds unsaved changes), uploading models, MIDI settings, the service functions. A preset created with **+** is saved automatically, but only has one lane.
 
 ## Hardware

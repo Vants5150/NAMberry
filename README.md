@@ -184,6 +184,8 @@ A small touch display for playing live, connected to the Pi's USB port with one 
 
 ![The Live Display link: display on a USB cable to the Raspberry Pi 5](docs/img/live_display_link.svg)
 
+![The Stage screen of the 4.0" display in landscape: the blocks of a preset as tiles](docs/img/live_display_4in_stage.jpg)
+
 The hardware specification (pins, screen, touch, what was found and what was not), the serial protocol and its flow control, how to build and load both sides, the measured figures and the limits are in **[docs/live-display.md](docs/live-display.md)**. It was tried on one unit; the audio latency with the display attached has not been measured again.
 
 ## Hardware
