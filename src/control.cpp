@@ -2112,15 +2112,35 @@ THTTPStatus CControl::GetContent (const char  *pPath,
 
 if (strcmp (pPath, "/fx") == 0)
 	{
-		// description of all the effects (parameters, groups, choices, descriptions): the page reads it only once
+		// description of all the effects (parameters, groups, choices, descriptions): the page reads it only once.
+		// k=<effect>: only that effect; l=1: only the list (key, title, hidden), a few KB: the touch display (which has little memory) asks for what it needs
+		char FxKey[32], FxL[4];
+		const boolean bOneFx = GetField (pParams, "k", FxKey, sizeof FxKey);
+		const boolean bFxList = !bOneFx && GetField (pParams, "l", FxL, sizeof FxL);
 		CBuf B (pBuffer, *pLength);
 		B.C ('[');
+		unsigned nFxOut = 0;
 		for (unsigned i = 0; i < FX_DEF_COUNT; i++)
 		{
 			const TFxDef &D = g_FxDefs[i];
-			if (i > 0)
+			if (bOneFx && strcmp (D.Name, FxKey) != 0)
+			{
+				continue;
+			}
+			if (nFxOut++ > 0)
 			{
 				B.C (',');
+			}
+			if (bFxList)
+			{
+				B.S ("{\"fx\":");
+				B.Esc (D.Name);
+				B.S (",\"title\":");
+				B.Esc (D.Title);
+				B.S (",\"hid\":");
+				B.I (D.Hidden);
+				B.C ('}');
+				continue;
 			}
 			B.S ("{\"fx\":");
 			B.Esc (D.Name);

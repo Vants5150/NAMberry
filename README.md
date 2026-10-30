@@ -35,7 +35,7 @@ The guitar goes into the Pisound, the Raspberry Pi 5 processes it and the result
 * **MIDI** over USB (DIN input is present in the code but disabled by default because it is untested on hardware).
 * **Updates over Wi-Fi** (signed with an HMAC key stored on the SD card, `ota.key`), a **fallback WPA2 access point** when the home network is missing, and a **concert mode** that boots without any network.
 * **DI recorder**: records the raw input (24-bit stereo) into memory and downloads it as a WAV file from the page.
-* **Live Display**: an optional wired touch display (ESP32-S3, one USB cable, no Wi-Fi needed while playing) to see and switch blocks, change presets, edit parameters and NAM models, and build a simple preset. See [docs/live-display.md](docs/live-display.md).
+* **Live Display**: an optional wired touch display (an ESP32 board, 2.8" or 4.0", one USB cable, no Wi-Fi needed while playing) to see and switch blocks, change presets, edit parameters and NAM models, and build a simple preset. See [docs/live-display.md](docs/live-display.md).
 
 ## Screenshots
 
@@ -180,7 +180,7 @@ A2 WaveNet captures run in the ADELnam engine. Each model's input level is set f
 
 ## Live Display
 
-A small touch display for playing live, connected to the Pi's USB port with one cable: the **Stage** screen shows the preset and the blocks as coloured tiles (tap to switch a block, hold to open its knobs, `<` `>` to change preset, level bars at the sides), the knobs and an editor with a slider and an Undo button change the parameters and the NAM model, and a "+" in the preset list builds a simple one-lane preset and saves it. The display is a Freenove ESP32-S3 2.8" (FNK0104B); its firmware is in `display/`, it is updated over Wi-Fi, and the screen can be rotated to landscape.
+A small touch display for playing live, connected to the Pi's USB port with one cable: the **Stage** screen shows the preset and the blocks as coloured tiles (tap to switch a block, hold to open its knobs, `<` `>` to change preset, level bars at the sides), the knobs and an editor with a slider and an Undo button change the parameters and the NAM model, and a "+" in the preset list builds a simple one-lane preset and saves it. Two Freenove boards are supported, one at a time on the cable: the ESP32-S3 2.8" (FNK0104B, capacitive touch) and the ESP32 CYD 4.0" (FNK0114S, resistive touch, through a CH340). The firmware is in `display/`, it is updated over Wi-Fi, and the screen can be rotated to landscape.
 
 ![The Live Display link: display on a USB cable to the Raspberry Pi 5](docs/img/live_display_link.svg)
 
@@ -192,7 +192,7 @@ The hardware specification (pins, screen, touch, what was found and what was not
 * Blokas Pisound (I2S audio, MIDI)
 * microSD card with Circle's boot files and Wi-Fi firmware (see "Not included")
 * A fan on the Pi 5 header is supported (PWM)
-* Optional: the Live Display (Freenove ESP32-S3 2.8" touch display, one USB-C cable), see above
+* Optional: the Live Display (Freenove ESP32-S3 2.8" or ESP32 CYD 4.0" touch display, one USB cable), see above
 
 <p align="center">
   <img src="docs/img/hw_front.jpg" alt="The enclosure seen from the front: two jack sockets on a turquoise panel, two knobs and a button on the lid" width="32%">

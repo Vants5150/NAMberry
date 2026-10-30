@@ -2563,6 +2563,7 @@ void CKernel::SerialRemovedHandler (CDevice *pDevice, void *pContext)
 }
 
 // sends a buffer over the serial link in small writes (the write of the USB serial driver is synchronous)
+#define SER_BAUD	460800		// speed of the serial link with the display when it goes through a UART bridge
 static unsigned s_nSerWrites = 0, s_nSerWriteMaxUs = 0;		// timing of the writes of the last reply, shown in the MIDI monitor
 static boolean SerialSendAll (CUSBSerialDevice *pS, const void *pData, unsigned nLen)
 {
@@ -2650,6 +2651,7 @@ void CKernel::SerialTick (unsigned nMs)
 			CUSBSerialDevice *pDev = (CUSBSerialDevice *) CDeviceNameService::Get ()->GetDevice ("utty1", FALSE);
 			if (pDev != 0)
 			{
+				pDev->SetBaudRate (SER_BAUD);		// UART bridges (CH341, ESP32 boards without native USB) need it; the CDC device of the ESP32-S3 ignores it
 				pDev->RegisterRemovedHandler (SerialRemovedHandler, this);
 				m_Rpc = CSerialRpc ();
 				m_nSerTxAt = nMs;

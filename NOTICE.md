@@ -45,7 +45,7 @@ What follows from it, as a reading of those facts and not legal advice:
 * [TFT_eSPI](https://github.com/Bodmer/TFT_eSPI) 2.5.43 (Bodmer; its `license.txt` says it started from Adafruit's MIT-licensed ILI9341 library and contains functions from Adafruit_GFX under the BSD license);
 * [ArduinoJson](https://arduinojson.org/) 7.x (B. Blanchon, MIT).
 
-`display/nb_display/User_Setup_NB.h` is a list of settings (pins and options found on the board), not a copy of Freenove's setup file. The Freenove FNK0104B is a product of its maker; this project is not affiliated with or endorsed by Freenove or Espressif.
+`display/nb_display/User_Setup_NB.h` is a list of settings (pins and options found on the boards or listed in Freenove's setup files), not a copy of them. The Freenove FNK0104B and FNK0114S are products of their maker; this project is not affiliated with or endorsed by Freenove or Espressif.
 
 ## Used only for testing, not part of the firmware
 

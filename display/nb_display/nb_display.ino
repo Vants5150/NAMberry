@@ -1,7 +1,8 @@
-// nb_display.ino - touch display for the NAMberry (Freenove ESP32-S3 2.8" FNK0104B): shows the preset in use, its blocks and their parameters.
-// Link to the NAMberry: USB serial (CDC), the line protocol of serialrpc.h ("Q <id> G /status" -> "A <id> <status> <length>" + body): the same JSON the web page uses.
+// nb_display.ino - touch display for the NAMberry: shows the preset in use, its blocks and their parameters, and edits them.
+// Boards: Freenove ESP32-S3 2.8" FNK0104B (capacitive touch, native USB, PSRAM) and Freenove ESP32 CYD 4.0" FNK0114S (ST7796 480x320, resistive touch, USB through a CH340 UART bridge, no PSRAM); the right one is chosen by the board you compile for.
+// Link to the NAMberry: USB serial, the line protocol of serialrpc.h ("Q <id> G /status" -> "A <id> <status> <length>" + body): the same JSON the web page uses.
 // Updates: ArduinoOTA over Wi-Fi. The network is chosen and its password typed ON THE DISPLAY (Cfg button: scan, select, on-screen keyboard); it is kept in the flash (NVS).
-// Libraries: TFT_eSPI with the settings of User_Setup_NB.h (next to this file), ArduinoJson 7. Board: esp32 core 3.x, ESP32-S3, 16 MB flash, OPI PSRAM, USB-CDC on boot, hardware CDC.
+// Libraries: TFT_eSPI with the settings of User_Setup_NB.h (next to this file), ArduinoJson 7. Board settings: see docs/live-display.md.
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -28,32 +29,47 @@ struct Row
 struct FieldSpec { const char *type, *key; float mn, mx, st; int kind; };
 
 // raise the number at every change: the screen shows it with the build time, so the firmware that runs is always known
-#define FW_NUM "11.1"
+#define FW_NUM "12.6"
 #define FW_NAME "nb_display v" FW_NUM
 #define FW_BUILD __DATE__ " " __TIME__
 
-// ---------------------------------------------------------------- pins (verified on the board, see the project notes)
+// ---------------------------------------------------------------- the board
+#ifdef ARDUINO_ESP32S3_DEV
+#define NB_S3				// ESP32-S3: capacitive touch FT6336 on I2C, native USB serial, PSRAM
+// pins (verified on the board, see docs/live-display.md)
 #define TP_SDA 16
 #define TP_SCL 15
 #define TP_RST 18
 #define RGB_LED 42
+#define NB_W0 240			// the screen in portrait: 240 x 320
+#define NB_H0 320
+static const size_t RX_CAP = 200 * 1024;		// reply buffer
+#else
+#define NB_CYD				// ESP32 CYD 4.0": resistive touch XPT2046 on the TFT's SPI bus (TOUCH_CS in the TFT_eSPI setup), UART0 through a CH340, no PSRAM
+static const size_t RX_CAP = 24 * 1024;			// the biggest reply is the model library, about 12 KB
+#define NB_W0 320			// the screen in portrait: 320 x 480
+#define NB_H0 480
+#define NB_BAUD 460800			// speed of the UART link (921600 gave read errors with esptool on this CH340) (must match SER_BAUD in the board's kernel.cpp)
+// resistive touch: raw readings of the corners, from Freenove's example for this screen (calibration data {303, 3458, 350, 3304, 7} for rotation 1)
+static const int TCAL_X0 = 303, TCAL_XR = 3458, TCAL_Y0 = 350, TCAL_YR = 3304;
+#endif
 
 static TFT_eSPI tftHw;
 static TFT_eSPI *gfx = &tftHw;			// where the drawing goes: the screen, or the off-screen frame while a whole view is composed
 #define tft (*gfx)
 
-// ---------------------------------------------------------------- PSRAM allocator for the big JSON documents
+// ---------------------------------------------------------------- allocator for the big JSON documents: PSRAM when the board has it, the ordinary heap otherwise
+static void *nbAlloc (size_t n) { void *p = ps_malloc (n); return p ? p : malloc (n); }
 struct SpiRamAllocator : ArduinoJson::Allocator
 {
-	void *allocate (size_t n) override { return ps_malloc (n); }
+	void *allocate (size_t n) override { return nbAlloc (n); }
 	void deallocate (void *p) override { free (p); }
-	void *reallocate (void *p, size_t n) override { return ps_realloc (p, n); }
+	void *reallocate (void *p, size_t n) override { return realloc (p, n); }
 };
 static SpiRamAllocator g_psAlloc;
 
 // ---------------------------------------------------------------- serial link
-static char *g_rx = nullptr;				// reply body buffer (PSRAM)
-static const size_t RX_CAP = 200 * 1024;
+static char *g_rx = nullptr;				// reply body buffer
 static uint32_t g_reqId = 0;
 static uint32_t g_lastAnswer = 0;
 static String g_msg;
@@ -61,7 +77,10 @@ static String g_rxInfo;					// result of the last reply received (bytes and time
 static bool g_fxOk = false;				// the effect definitions have been read
 static volatile unsigned g_nDraw = 0, g_nFull = 0, g_nKnob = 0, g_nTile = 0, g_nDyn = 0, g_nPoll = 0;	// how often each drawing step ran (read on the status page)
 static char g_lastFullView[96];		// a plain array: the status page reads it from another task
+static char g_tlog[8][72];				// the last presses, for the status page: result, duration, start, end, strongest pressure, samples
+static uint8_t g_tlogN = 0;
 static void draw ();
+static void touchPoll ();				// samples the touch (defined with the touch code; also called while waiting for the board)
 static WebServer g_web (80);
 
 static bool readLine (char *out, size_t cap, uint32_t timeoutMs)
@@ -77,6 +96,7 @@ static bool readLine (char *out, size_t cap, uint32_t timeoutMs)
 			if (c != '\r' && n + 1 < cap) out[n++] = (char) c;
 		}
 		delay (1);
+		touchPoll ();			// the touch is followed while the board is waited for
 	}
 	return false;
 }
@@ -110,7 +130,7 @@ static int rpc (bool post, const char *path, const char *form, size_t *pLen, uin
 					const size_t n = Serial.read (g_rx + got, blockEnd - got);
 					if (n > 0) { got += n; last = millis (); }
 					else if (millis () - last > 3000) { g_msg = "body stalled " + String ((unsigned) got) + "/" + String (len); return -1; }
-					else delay (1);
+					else { delay (1); touchPoll (); }
 				}
 				if (got < len) Serial.write ('K');
 				if (!g_fxOk && millis () - tShow > 500)		// the progress is shown only while the effects are read the first time: later replies must not repaint the screen
@@ -131,7 +151,11 @@ static int rpc (bool post, const char *path, const char *form, size_t *pLen, uin
 }
 
 // ---------------------------------------------------------------- data
-static JsonDocument g_fx (&g_psAlloc);			// the effect definitions (GET /fx), loaded once
+// The effect definitions are fetched as they are needed (the board answers GET /fx with k=<effect> for one effect and l=1 for the list of keys and titles): the whole
+// description is 110 KB, too much for a board without PSRAM. A board with the old firmware answers every request with all of them: then everything is taken at once.
+static JsonDocument g_fx (&g_psAlloc);			// full definitions (an array), appended when an effect of the preset needs one
+static JsonDocument g_fxList (&g_psAlloc);		// key, title, hidden of every effect (for the list of blocks to choose)
+static bool g_fxAll = false;				// g_fx holds every definition
 static JsonDocument g_st;				// the last /status
 static bool g_stOk = false;
 static String g_fwVer;
@@ -143,14 +167,62 @@ static JsonObject fxDef (const char *key)
 	return JsonObject ();
 }
 
+// takes the definitions in the reply in g_rx into g_fx (one, several, or all of them)
+static bool takeFxDefs (size_t len)
+{
+	static JsonDocument tmp (&g_psAlloc);
+	tmp.clear ();
+	if (deserializeJson (tmp, g_rx, len) || !tmp.is<JsonArray> () || tmp.size () == 0) return false;
+	if (tmp.size () > 20)
+	{
+		// every definition: the old firmware does not filter
+		g_fx.clear ();
+		g_fx.set (tmp);
+		g_fxAll = true;
+		return true;
+	}
+	if (g_fx.isNull ()) g_fx.to<JsonArray> ();
+	for (JsonObject d : tmp.as<JsonArray> ())
+		if (fxDef (d["fx"] | "").isNull ()) g_fx.as<JsonArray> ().add (d);
+	return true;
+}
+
+// the list of effects (key, title, hidden): a few KB
 static bool loadFx ()
 {
 	size_t len;
-	if (rpc (false, "/fx", "", &len, 15000) != 200) return false;
-	g_fx.clear ();
-	const DeserializationError e = deserializeJson (g_fx, g_rx, len);
-	g_fxOk = !e && g_fx.is<JsonArray> () && g_fx.size () > 0;
-	return g_fxOk;
+	if (rpc (false, "/fx", "l=1", &len, 8000) != 200) return false;
+	g_fxList.clear ();
+	if (deserializeJson (g_fxList, g_rx, len) || !g_fxList.is<JsonArray> () || g_fxList.size () == 0) return false;
+	if (g_fxList.size () > 0 && !g_fxList[0]["p"].isNull ())
+	{
+		// the old firmware ignored the filter and sent everything
+		g_fx.clear ();
+		g_fx.set (g_fxList);
+		g_fxAll = true;
+	}
+	g_fxOk = true;
+	return true;
+}
+
+// fetches the definitions of the effects of the preset that are not here yet (a few per call, so that the touch stays responsive); true if one was added
+static bool ensureDefs ()
+{
+	if (g_fxAll || !g_stOk) return false;
+	int fetched = 0;
+	bool any = false;
+	for (JsonObject cell : g_st["board"]["net"]["cells"].as<JsonArray> ())
+	{
+		JsonObject b = cell["b"][0];
+		if (b.isNull () || strcmp (b["t"] | "", "fx")) continue;
+		const char *key = b["fx"] | "";
+		if (!key[0] || !fxDef (key).isNull ()) continue;
+		if (fetched >= 3) break;
+		fetched++;
+		size_t len;
+		if (rpc (false, "/fx", (String ("k=") + key).c_str (), &len, 4000) == 200 && takeFxDefs (len)) any = true;
+	}
+	return any;
 }
 
 static bool loadStatus ()
@@ -405,7 +477,8 @@ static void buildTypes ()
 	g_types.push_back ({"", "(empty slot)"});
 	g_types.push_back ({"nam", "NAM model"});
 	std::vector<NewBlock> fx;
-	for (JsonObject d : g_fx.as<JsonArray> ())
+	JsonArray fxSrc = g_fxAll ? g_fx.as<JsonArray> () : g_fxList.as<JsonArray> ();
+	for (JsonObject d : fxSrc)
 	{
 		const String key = String ((const char *) (d["fx"] | ""));
 		if ((int) (d["hid"] | 0) || key == "selector" || key == "adelsendsweep" || key == "") continue;		// old versions, the routing selector and the probe are not for a simple preset
@@ -560,6 +633,8 @@ static void netTask (void *)
 						+ "\nmsg " + g_msg + "\nrx " + g_rxInfo + "\nreq_id " + String ((unsigned long) g_reqId)
 						+ "\ndraw " + String (g_nDraw) + " full " + String (g_nFull) + " knob " + String (g_nKnob) + " tile " + String (g_nTile) + " dyn " + String (g_nDyn) + " poll " + String (g_nPoll)
 						+ "\nview " + g_lastFullView + "\n";
+					for (int i = 0; i < 8; i++)
+							if (g_tlog[(g_tlogN + i) & 7][0]) s += "touch " + String (g_tlog[(g_tlogN + i) & 7]) + "\n";		// the last presses, oldest first: T tap, S swipe, H sideways, L long, x ignored
 					g_web.send (200, "text/plain", s);
 				});
 				g_web.begin ();
@@ -581,18 +656,20 @@ static void wifiLoop ()
 // ---------------------------------------------------------------- touch
 static int g_rot = 0;					// screen rotation 0..3 as TFT_eSPI setRotation (0/2 portrait, 1/3 landscape), saved in NVS namespace "nbui"
 
-// the touch panel reports the position in the portrait frame (x 0..239, y 0..319); this gives the position in the frame of the current rotation
+// the touch panel reports the position in the portrait frame (x 0..NB_W0-1, y 0..NB_H0-1); this gives the position in the frame of the current rotation
 // (rotation 1 = MADCTL MV, 3 = MX|MY|MV, 2 = MY, as in TFT_eSPI's ILI9341 driver; the portrait one is verified, the landscape ones follow from the same table)
 static void mapTouch (int rx, int ry, int *px, int *py)
 {
 	switch (g_rot)
 	{
-	case 1: *px = ry; *py = 239 - rx; break;
-	case 2: *px = 239 - rx; *py = 319 - ry; break;
-	case 3: *px = 319 - ry; *py = rx; break;
+	case 1: *px = ry; *py = (NB_W0 - 1) - rx; break;
+	case 2: *px = (NB_W0 - 1) - rx; *py = (NB_H0 - 1) - ry; break;
+	case 3: *px = (NB_H0 - 1) - ry; *py = rx; break;
 	default: *px = rx; *py = ry; break;
 	}
 }
+static volatile uint16_t g_lastZ = 0;			// pressure of the last touch reading (0 on the capacitive screen)
+#ifdef NB_S3
 static uint8_t i2cRead (uint8_t addr, uint8_t reg, uint8_t *out, uint8_t n)
 {
 	Wire.beginTransmission (addr);
@@ -601,31 +678,133 @@ static uint8_t i2cRead (uint8_t addr, uint8_t reg, uint8_t *out, uint8_t n)
 	return Wire.requestFrom ((int) addr, (int) n) == n ? (Wire.readBytes (out, n), n) : 0;
 }
 
-// returns true once for every new touch (the first sample of a press)
-static bool touchPress (int *px, int *py)
+// one finger on the panel: its position in the portrait frame (see mapTouch)
+static bool touchRaw (int *rx, int *ry, bool held)
 {
-	static bool down = false;
 	uint8_t t[5];
 	if (i2cRead (0x38, 0x02, t, 5) == 5 && (t[0] & 0x0F) == 1)
 	{
-		mapTouch (((t[1] & 0x0F) << 8) | t[2], ((t[3] & 0x0F) << 8) | t[4], px, py);
-		if (!down) { down = true; return true; }
-		return false;
+		*rx = ((t[1] & 0x0F) << 8) | t[2];
+		*ry = ((t[3] & 0x0F) << 8) | t[4];
+		return true;
 	}
-	down = false;
 	return false;
+}
+#else
+// resistive XPT2046 on the TFT's SPI bus (TFT_eSPI reads it): the pressure decides if there is a finger (a higher threshold to begin a press than to keep it, so that a
+// light touch is not cut in pieces), the two raw values become the portrait frame through Freenove's calibration for rotation 1 (rotate, invert x, invert y):
+// x1 = W - (rawY - x0) * W / xr, y1 = H - (rawX - y0) * H / yr, with W x H = 480 x 320; the portrait frame is then (319 - y1, x1)
+static bool touchRaw (int *rx, int *ry, bool held)
+{
+	const uint16_t z = tftHw.getTouchRawZ ();
+	g_lastZ = z;
+	if (z < (held ? 90 : 250)) return false;
+	uint16_t a, b, c, d;
+	tftHw.getTouchRaw (&a, &b);
+	tftHw.getTouchRaw (&c, &d);
+	const int rawX = ((int) a + c) / 2, rawY = ((int) b + d) / 2;
+	int x1 = 480 - (rawY - TCAL_X0) * 480 / TCAL_XR;
+	int y1 = 320 - (rawX - TCAL_Y0) * 320 / TCAL_YR;
+	x1 = x1 < 0 ? 0 : (x1 > 479 ? 479 : x1);
+	y1 = y1 < 0 ? 0 : (y1 > 319 ? 319 : y1);
+	*rx = 319 - y1;
+	*ry = x1;
+	return true;
+}
+#endif
+
+// ---------------------------------------------------------------- touch tracker
+// The touch is sampled every time touchPoll () runs, also while the program waits for a reply of the board (rpc) and not only once per turn of loop (): a short tap that
+// readings to wait for after the contact before a press counts, and how far the finger may move for it to be a tap or a long press
+#ifdef NB_CYD
+static const int SETTLE_N = 3, TAP_SLOP = 20;
+#else
+static const int SETTLE_N = 1, TAP_SLOP = 14;
+#endif
+// begins and ends during a 75 ms read of the status used to be lost. A press starts after two samples in a row (debounce) and ends after three without touch.
+struct TouchTrk
+{
+	bool down = false;				// a finger is on the screen
+	bool pressed = false;				// a press began and has not been taken by touchPress () yet
+	bool ended = false;				// a press ended and has not been taken yet
+	bool longDone = false;				// the long press of this press already acted
+	bool settled = false;				// the first readings are over: the position is reliable
+	int sx = 0, sy = 0, lx = 0, ly = 0;		// the current press: where it began, where the finger is
+	int esx = 0, esy = 0, elx = 0, ely = 0;		// the last press that ended
+	uint32_t t0 = 0;				// when it began
+	uint8_t on = 0, off = 0;			// samples in a row with / without touch
+	uint16_t zmax = 0, n = 0, good = 0;		// strongest pressure, number of samples and of reliable ones of the current press
+	uint8_t eidx = 0;				// the log entry of the press that ended last
+};
+static TouchTrk g_trk;
+
+static void touchPoll ()
+{
+	int rx, ry, x = 0, y = 0;
+	const bool on = touchRaw (&rx, &ry, g_trk.down);
+	if (on) { mapTouch (rx, ry, &x, &y); g_trk.off = 0; if (g_trk.on < 250) g_trk.on++; }
+	else { g_trk.on = 0; if (g_trk.off < 250) g_trk.off++; }
+	if (!g_trk.down)
+	{
+		if (g_trk.on >= 2)
+		{
+			g_trk.down = true; g_trk.settled = false; g_trk.longDone = false; g_trk.t0 = millis ();
+			g_trk.sx = g_trk.lx = x; g_trk.sy = g_trk.ly = y;
+			g_trk.zmax = g_lastZ; g_trk.n = 1; g_trk.good = 0;
+		}
+	}
+	else if (on)
+	{
+		if (g_lastZ > g_trk.zmax) g_trk.zmax = g_lastZ;
+		g_trk.n++;
+		// A resistive screen reads positions 20-30 px off while the pressure rises and falls (the log of the status page showed it): a reading counts only when the
+		// pressure is at least half of the strongest of this press (and above a minimum). The press begins with the first good readings and ends at the last one.
+#ifdef NB_CYD
+		const bool good = g_lastZ >= (g_trk.zmax / 2 > 400 ? g_trk.zmax / 2 : 400);
+#else
+		const bool good = true;
+#endif
+		if (good)
+		{
+			g_trk.lx = x; g_trk.ly = y;
+			if (g_trk.good < 250) g_trk.good++;
+			if (!g_trk.settled)
+			{
+				g_trk.sx = x; g_trk.sy = y;
+				if (g_trk.good >= SETTLE_N) { g_trk.settled = true; g_trk.pressed = true; }
+			}
+		}
+	}
+	else if (g_trk.off >= 3)
+	{
+		g_trk.down = false;
+		if (g_trk.settled)
+		{
+			g_trk.ended = true;
+			g_trk.esx = g_trk.sx; g_trk.esy = g_trk.sy; g_trk.elx = g_trk.lx; g_trk.ely = g_trk.ly;
+			g_trk.eidx = g_tlogN++ & 7;
+			snprintf (g_tlog[g_trk.eidx], sizeof g_tlog[0], "?  %lu ms  (%d,%d) -> (%d,%d)  zmax %u  n %u good %u", (unsigned long) (millis () - g_trk.t0), g_trk.sx, g_trk.sy, g_trk.lx, g_trk.ly, (unsigned) g_trk.zmax, (unsigned) g_trk.n, (unsigned) g_trk.good);
+		}
+	}
+}
+
+// returns true once for every new touch (the first sample of a press)
+static bool touchPress (int *px, int *py)
+{
+	touchPoll ();
+	if (!g_trk.pressed) return false;
+	g_trk.pressed = false;
+	*px = g_trk.sx; *py = g_trk.sy;
+	return true;
 }
 
 // true while a finger is on the screen (for the slider)
 static bool touchNow (int *px, int *py)
 {
-	uint8_t t[5];
-	if (i2cRead (0x38, 0x02, t, 5) == 5 && (t[0] & 0x0F) == 1)
-	{
-		mapTouch (((t[1] & 0x0F) << 8) | t[2], ((t[3] & 0x0F) << 8) | t[4], px, py);
-		return true;
-	}
-	return false;
+	touchPoll ();
+	if (!g_trk.down) return false;
+	*px = g_trk.lx; *py = g_trk.ly;
+	return true;
 }
 
 // ---------------------------------------------------------------- screens
@@ -635,6 +814,7 @@ static int g_edRow = -1;				// the row being edited (index in g_rows)
 static float g_edStart = 0;				// its value when the editor was opened (for Undo)
 static String g_sig;					// what the data screen shows: it is redrawn only when this changes (no flicker)
 // layout: set by applyLayout () for the rotation (0/2 portrait 240x320, 1/3 landscape 320x240)
+static const int ROW_H = 40, ROW_Y = 40;		// height of a list row and where the list starts
 static int SW = 240, SH = 320, ROWS = 6, FOOT_Y = 284;
 static int SL_X = 10, SL_W = 220, SL_Y = 100, SL_H = 40;		// slider of the editor
 static int EVAL_Y = 52, EBTN_Y = 170, EBTN_H = 56, EMSG_Y = 250, EBOOL_Y = 110, EST_Y = 80;	// editor: value, - / + buttons, message, on/off button
@@ -642,25 +822,25 @@ static int KB_Y = 96, KEY_W = 24, KEY_H = 34, PW_Y = 44, PW_H = 30, PWMSG_Y = 78
 static int BTN_X = 10, BTN_W = 220, CFG_Y0 = 154, CFG_DY = 36;			// Cfg screen buttons
 static void applyLayout ()
 {
+	// the sizes follow the screen of the board (the values for the 240 x 320 screen are the original ones)
 	if (g_rot & 1)
 	{
-		SW = 320; SH = 240; ROWS = 4; FOOT_Y = 204;
-		SL_X = 10; SL_W = 300; SL_Y = 78; SL_H = 30;
-		EVAL_Y = 42; EBTN_Y = 146; EBTN_H = 40; EMSG_Y = 188; EBOOL_Y = 90; EST_Y = 122;
-		KB_Y = 74; KEY_W = 32; KEY_H = 28; PW_Y = 40; PW_H = 22; PWMSG_Y = 64;
-		BTN_X = 172; BTN_W = 140; CFG_Y0 = 44; CFG_DY = 38;
+		SW = NB_H0; SH = NB_W0; FOOT_Y = SH - 36; ROWS = (FOOT_Y - ROW_Y) / ROW_H;
+		SL_X = 10; SL_W = SW - 20; SL_Y = 78; SL_H = 30;
+		EVAL_Y = 42; EBTN_Y = 146; EBTN_H = 40; EMSG_Y = FOOT_Y - 16; EBOOL_Y = 90; EST_Y = 122;
+		KB_Y = 74; KEY_W = SW / 10; KEY_H = 28; PW_Y = 40; PW_H = 22; PWMSG_Y = 64;
+		BTN_X = SW - 148; BTN_W = 140; CFG_Y0 = 44; CFG_DY = 38;
 	}
 	else
 	{
-		SW = 240; SH = 320; ROWS = 6; FOOT_Y = 284;
-		SL_X = 10; SL_W = 220; SL_Y = 100; SL_H = 40;
+		SW = NB_W0; SH = NB_H0; FOOT_Y = SH - 36; ROWS = (FOOT_Y - ROW_Y) / ROW_H;
+		SL_X = 10; SL_W = SW - 20; SL_Y = 100; SL_H = 40;
 		EVAL_Y = 52; EBTN_Y = 170; EBTN_H = 56; EMSG_Y = 250; EBOOL_Y = 110; EST_Y = 80;
-		KB_Y = 96; KEY_W = 24; KEY_H = 34; PW_Y = 44; PW_H = 30; PWMSG_Y = 78;
-		BTN_X = 10; BTN_W = 220; CFG_Y0 = 154; CFG_DY = 36;
+		KB_Y = 96; KEY_W = SW / 10; KEY_H = 34; PW_Y = 44; PW_H = 30; PWMSG_Y = 78;
+		BTN_X = 10; BTN_W = SW - 20; CFG_Y0 = 154; CFG_DY = 36;
 	}
 }
 static int g_page = 0, g_sel = -1;
-static const int ROW_H = 40, ROW_Y = 40;
 static bool g_dirty = true;
 
 // Wi-Fi scan results
@@ -838,8 +1018,8 @@ static void drawTile (int x, int y, int w, int h, JsonObject b, bool withValue)
 }
 
 // geometry of the tile grid of the chain screen
-static int chainCols () { return (g_rot & 1) ? 4 : 3; }
-static int chainRows () { return (g_rot & 1) ? 2 : 4; }
+static int chainCols () { return SW / 80 < 2 ? 2 : SW / 80; }
+static int chainRows () { const int r = (FOOT_Y - ROW_Y - 6 + 6) / 61; return r < 2 ? 2 : r; }	// tiles at least 55 px high
 static void chainCell (int i, int *x, int *y, int *w, int *h)
 {
 	const int cols = chainCols (), rows = chainRows ();
@@ -893,8 +1073,8 @@ static void drawMeters (bool force)
 }
 
 // geometry of the knobs of the parameter screen
-static int knobCols () { return (g_rot & 1) ? 3 : 2; }
-static int knobPerPage () { return 6; }
+static int knobCols () { return SW / 106 < 2 ? 2 : SW / 106; }
+static int knobPerPage () { const int r = (FOOT_Y - ROW_Y - 4) / 80; return knobCols () * (r < 2 ? 2 : r); }
 static void knobCell (int i, int *x, int *y, int *w, int *h)
 {
 	const int cols = knobCols (), rows = knobPerPage () / cols;
@@ -951,6 +1131,9 @@ static TFT_eSprite fb (&tftHw);
 static int g_fbW = 0, g_fbH = 0;
 static bool fbBegin ()
 {
+#ifdef NB_CYD
+	return false;				// no PSRAM: a whole-screen frame does not fit, the views are drawn straight to the screen
+#endif
 	if (g_fbW != SW || g_fbH != SH)
 	{
 		fb.deleteSprite ();
@@ -968,8 +1151,8 @@ struct FbGuard
 	~FbGuard () { if (on) { fb.pushSprite (0, 0); gfx = &tftHw; } }
 };
 
-// while the slider is dragged only the value and the fill are redrawn (a full redraw would flicker)
 // The value text and the slider are composed in memory (sprites) and sent to the screen in one piece: no erase-then-draw step, so no flicker while dragging.
+// Without PSRAM the slider sprite uses 8 bits per pixel, and if even that does not fit the parts are painted directly.
 static void drawEditDynamic ()
 {
 	if (g_edRow < 0 || g_edRow >= (int) g_rows.size ()) return;
@@ -977,24 +1160,53 @@ static void drawEditDynamic ()
 	const Row &r = g_rows[g_edRow];
 	static TFT_eSprite vs (&tftHw), ss (&tftHw);
 	static int vw = 0, sw = 0, sh = 0;
-	const int w = SW - 40;
+	const int w = SW - 40 < 240 ? SW - 40 : 240;
 	if (vw != w) { vs.deleteSprite (); vs.createSprite (w, 28); vw = w; }
-	vs.fillSprite (TFT_BLACK);
-	vs.setTextColor (TFT_CYAN, TFT_BLACK);
-	vs.setTextDatum (TC_DATUM);
-	vs.drawString (fmtNum (r, r.v), w / 2, 0, 4);
-	vs.pushSprite (20, EVAL_Y);
+	if (vs.created ())
+	{
+		vs.fillSprite (TFT_BLACK);
+		vs.setTextColor (TFT_CYAN, TFT_BLACK);
+		vs.setTextDatum (TC_DATUM);
+		vs.drawString (fmtNum (r, r.v), w / 2, 0, 4);
+		vs.pushSprite (SW / 2 - w / 2, EVAL_Y);
+	}
+	else
+	{
+		tftHw.setTextColor (TFT_CYAN, TFT_BLACK);
+		tftHw.setTextDatum (TC_DATUM);
+		tftHw.setTextPadding (w);
+		tftHw.drawString (fmtNum (r, r.v), SW / 2, EVAL_Y, 4);
+		tftHw.setTextPadding (0);
+		tftHw.setTextDatum (TL_DATUM);
+	}
 	if (r.kind == 2) return;
-	if (sw != SL_W || sh != SL_H) { ss.deleteSprite (); ss.createSprite (SL_W, SL_H); sw = SL_W; sh = SL_H; }
+	if (sw != SL_W || sh != SL_H)
+	{
+		ss.deleteSprite ();
+#ifdef NB_CYD
+		ss.setColorDepth (8);
+#endif
+		ss.createSprite (SL_W, SL_H);
+		sw = SL_W; sh = SL_H;
+	}
 	const float f0 = r.mx > r.mn ? (r.v - r.mn) / (r.mx - r.mn) : 0.0f;
 	const int px = (int) ((SL_W - 4) * (f0 < 0 ? 0 : (f0 > 1 ? 1 : f0)));
-	ss.fillSprite (TFT_BLACK);
-	ss.drawRect (0, 0, SL_W, SL_H, TFT_WHITE);
-	ss.fillRect (2, 2, px, SL_H - 4, 0x0310);
 	const float fs0 = r.mx > r.mn ? (g_edStart - r.mn) / (r.mx - r.mn) : 0.0f;
 	const int sx = 2 + (int) ((SL_W - 4) * (fs0 < 0 ? 0 : (fs0 > 1 ? 1 : fs0)));
-	ss.drawFastVLine (sx, 0, SL_H, rgb (255, 170, 60));		// where the value started
-	ss.pushSprite (SL_X, SL_Y);
+	if (ss.created ())
+	{
+		ss.fillSprite (TFT_BLACK);
+		ss.drawRect (0, 0, SL_W, SL_H, TFT_WHITE);
+		ss.fillRect (2, 2, px, SL_H - 4, 0x0310);
+		ss.drawFastVLine (sx, 0, SL_H, rgb (255, 170, 60));		// where the value started
+		ss.pushSprite (SL_X, SL_Y);
+	}
+	else
+	{
+		tftHw.fillRect (SL_X + 2, SL_Y + 2, SL_W - 4, SL_H - 4, TFT_BLACK);
+		tftHw.fillRect (SL_X + 2, SL_Y + 2, px, SL_H - 4, 0x0310);
+		tftHw.drawFastVLine (SL_X + sx, SL_Y, SL_H, rgb (255, 170, 60));
+	}
 }
 
 static void draw ()
@@ -1003,7 +1215,7 @@ static void draw ()
 	// The stage and knob screens are repainted piece by piece when only a value changed (no flicker); everything else is repainted whole.
 	// A different screen, page, block, preset or rotation is a new view: clear it and forget what was drawn.
 	static String lastView;
-	static String tsig[12], ksig[6];
+	static String tsig[32], ksig[24];
 	static String hdrSig;
 	String view = String ((int) g_scr) + "|" + String (g_rot) + "|" + String (g_page) + "|" + String (g_stagePg) + "|" + String (g_sel) + "|" + g_preset;
 	if (g_scr != SCR_STAGE && g_scr != SCR_PARAMS) view += "|" + String (millis ());		// always whole
@@ -1053,7 +1265,7 @@ static void draw ()
 		drawHeader ("Config", String (FW_NAME));
 		tft.setTextColor (TFT_WHITE, TFT_BLACK);
 		// in landscape the text is the left column (clipped, the buttons are on the right)
-		const int cl = (g_rot & 1) ? 19 : 32;
+		const int cl = (g_rot & 1) ? (BTN_X - 12) / 8 : (SW - 12) / 8;
 		tft.drawString (g_wifiMsg.substring (0, cl), 8, 44, 2);
 		tft.setTextColor (TFT_CYAN, TFT_BLACK);
 		tft.drawString ((g_ssid.length () ? "Saved: " + g_ssid : String ("Saved: none")).substring (0, cl), 8, 62, 2);
@@ -1480,7 +1692,7 @@ static void openBlockAt (int x, int y)
 		if (k >= (int) g_blocks.size ()) break;
 		int bx, by, bw, bh;
 		chainCell (i, &bx, &by, &bw, &bh);
-		if (x >= bx && x < bx + bw && y >= by && y < by + bh)
+		if (x >= bx - 3 && x < bx + bw + 3 && y >= by - 3 && y < by + bh + 3)		// 3 px of margin: the tiles are 6 px apart and the touch has a few px of error
 		{
 			g_sel = k;
 			buildRows (g_blocks[k].b);
@@ -1670,7 +1882,7 @@ static void onTouch (int x, int y)
 			if (k >= (int) g_blocks.size ()) break;
 			int bx, by, bw, bh;
 			chainCell (i, &bx, &by, &bw, &bh);
-			if (x >= bx && x < bx + bw && y >= by && y < by + bh)
+			if (x >= bx - 3 && x < bx + bw + 3 && y >= by - 3 && y < by + bh + 3)
 			{
 				const bool on = (int) (g_blocks[k].b["on"] | 1) != 0;
 				if (boardSet (g_blocks[k].id, "on", on ? 0.0f : 1.0f)) g_blocks[k].b["on"] = on ? 0 : 1;
@@ -1780,17 +1992,21 @@ static void onTouch (int x, int y)
 void setup ()
 {
 	Serial.setRxBufferSize (16384);
+#ifdef NB_S3
 	Serial.begin (115200);
 	neopixelWrite (RGB_LED, 0, 0, 0);
 	pinMode (TP_RST, OUTPUT); digitalWrite (TP_RST, LOW); delay (20); digitalWrite (TP_RST, HIGH); delay (100);
 	Wire.begin (TP_SDA, TP_SCL, 400000);
+#else
+	Serial.begin (NB_BAUD);
+#endif
 	tft.init ();
 	g_prefs.begin ("nbui", true); g_rot = g_prefs.getInt ("rot", 0) & 3; g_prefs.end ();
 	tft.setRotation (g_rot);
 	applyLayout ();
 	tft.fillScreen (TFT_BLACK);
-	g_rx = (char *) ps_malloc (RX_CAP);
-	if (!g_rx) { g_msg = "no PSRAM"; }
+	g_rx = (char *) nbAlloc (RX_CAP);
+	if (!g_rx) { g_msg = "no memory"; }
 	wifiLoadSaved ();
 	xTaskCreatePinnedToCore (netTask, "net", 8192, nullptr, 1, nullptr, 0);
 	draw ();
@@ -1832,6 +2048,7 @@ void loop ()
 		if (!ok) { if (g_msg != "no answer on the USB link") { g_msg = "no answer on the USB link"; g_dirty = true; } }
 		else
 		{
+			ensureDefs ();		// the definitions of the effects of this preset, if the board does not have them yet
 			// rebuild the lists when the preset or its blocks changed
 			String key = String (g_st["pc"] | "") + String ((int) (g_st["pd"] | 0)) + String (g_st["board"]["s"] | 0);
 			const bool changed = key != g_blocksKey;
@@ -1864,31 +2081,29 @@ void loop ()
 	if (!listScr)
 	{
 		if (touchPress (&x, &y)) onTouch (x, y);
+		g_trk.ended = false;		// a press that ended here must not act later, on a list screen
 	}
 	else
 	{
 		// lists: a tap acts when the finger is lifted, a vertical swipe turns the page (swipe up = next page, down = previous);
-		// on the stage screen a long press on a block opens its knobs
-		static bool down = false, longDone = false;
-		static uint32_t tDown = 0;
-		static int sx = 0, sy = 0, lx = 0, ly = 0;
-		if (finger && !down) { down = true; longDone = false; tDown = millis (); sx = lx = x; sy = ly = y; }
-		else if (finger)
+		// on the stage screen a long press on a block opens its knobs. The press is followed by the touch tracker, which also saw the ones that began and ended
+		// while the program was waiting for the board.
+		g_trk.pressed = false;
+		if (g_trk.down && g_scr == SCR_STAGE && !g_trk.longDone && millis () - g_trk.t0 > 600 && abs (g_trk.lx - g_trk.sx) < TAP_SLOP && abs (g_trk.ly - g_trk.sy) < TAP_SLOP)
 		{
-			lx = x; ly = y;
-			if (g_scr == SCR_STAGE && !longDone && millis () - tDown > 600 && abs (lx - sx) < 14 && abs (ly - sy) < 14)
-			{
-				longDone = true;
-				openBlockAt (sx, sy);
-			}
+			g_trk.longDone = true;
+			openBlockAt (g_trk.sx, g_trk.sy);
 		}
-		else if (down)
+		if (g_trk.ended)
 		{
-			down = false;
-			const int dx = lx - sx, dy = ly - sy;
-			if (longDone) { }		// the long press has already acted
+			g_trk.ended = false;
+			const int sx = g_trk.esx, sy = g_trk.esy;
+			const int dx = g_trk.elx - sx, dy = g_trk.ely - sy;
+			char tag = 'x';				// what the press was taken for, shown in the touch log of the status page
+			if (g_trk.longDone) tag = 'L';
 			else if (abs (dy) > 30 && abs (dy) > 2 * abs (dx) && sy >= ROW_Y && sy < FOOT_Y)
 			{
+				tag = 'S';
 				// up = next page, down = previous page
 				if (g_scr == SCR_STAGE)
 				{
@@ -1903,10 +2118,12 @@ void loop ()
 			}
 			else if (abs (dx) > 45 && abs (dx) > 2 * abs (dy) && sy >= ROW_Y && sy < FOOT_Y && g_scr == SCR_PARAMS)
 			{
+				tag = 'H';
 				stepBlock (dx < 0 ? 1 : -1);		// sideways: next / previous block
 				g_dirty = true;
 			}
-			else if (abs (dx) < 14 && abs (dy) < 14) onTouch (sx, sy);
+			else if (abs (dx) < TAP_SLOP && abs (dy) < TAP_SLOP) { tag = 'T'; onTouch (sx, sy); }
+			g_tlog[g_trk.eidx][0] = tag;
 		}
 	}
 	// slider of the editor: follows the finger, one command at most every 120 ms
