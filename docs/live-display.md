@@ -12,7 +12,7 @@ A small wired touch display for playing live: it shows the preset and its blocks
 | Touch | capacitive (FT6336, I2C) | resistive (XPT2046, on the screen's SPI bus) |
 | USB | native USB Serial/JTAG (CDC) | UART through a CH340 |
 | Memory | 8 MB PSRAM | none |
-| Tried on the cable | yes (with the Circle patch) | yes (CH341 driver of Circle, no patch) |
+| Tried on the cable | yes (with the Circle patch) | yes (CH341 driver of Circle, no patch); swapping the two with the board running was tried once |
 
 ## What it does
 
@@ -141,7 +141,7 @@ Written down because each cost time:
 ## What is not measured
 
 * **Audio latency and noise with a display connected.** The link is served by the MIDI task and the audio callback was not touched, and the board's counters showed no overruns, but the loop-back latency was not measured again and nothing was recorded to compare.
-* **Changing from one display to the other while the board runs.** The firmware notices that the device is gone and looks for another every second, but this was not tried. The S3 was last tried on the cable with the previous firmware (without the `/fx` filter and the baud setting), which it should still work with.
+* **Changing from one display to the other while the board runs** was tried by hand once on the author's units and worked (the board did not restart, no overruns afterwards); it was not repeated many times or timed. The firmware notices that the device is gone and looks for another every second.
 * Long runs of days, and what happens to the board if the display stops reading in the middle of a reply (the write is synchronous; the 1.5 s timeout covers a display that stops answering `K`, not a hung USB transfer).
 * The touch calibration of the 4.0" beyond trying it by hand; the landscape touch mapping of the S3 was derived from the display driver's register table and also tried by hand.
 * The filter of `/fx` is not covered by a host test (the handler needs the web server); it was checked on the real board: without parameters 109,806 bytes as before, `l=1` 3,502 bytes, `k=noisegate` 838 bytes, `k=adelverbm` 7,115 bytes, an unknown effect `[]`.
