@@ -192,7 +192,7 @@ The hardware specification (pins, screen, touch, what was found and what was not
 
 * Raspberry Pi 5
 * Blokas Pisound (I2S audio, MIDI)
-* microSD card with Circle's boot files and Wi-Fi firmware (see "Not included")
+* microSD card with Circle's boot files and Wi-Fi firmware (see "Getting started")
 * A fan on the Pi 5 header is supported (PWM)
 * Optional: the Live Display (Freenove ESP32-S3 2.8" or ESP32 CYD 4.0" touch display, one USB cable), see above
 
@@ -204,34 +204,83 @@ The hardware specification (pins, screen, touch, what was found and what was not
 
 *The author's enclosure: two jack sockets on the front panel, two 5-pin DIN sockets and ventilation slots on one end, two knobs and a button on the lid. The firmware's DIN MIDI input is disabled by default (see above); the knobs and the button are not described here because their functions are not documented in this repository.*
 
-## Building
+## Getting started
 
-You need an `aarch64-linux-gnu` cross toolchain (or build on a Pi 5) and Circle.
+* **You need:** Raspberry Pi 5, Blokas Pisound, a microSD card (FAT32), and a PC (or the Pi 5 itself) with `git`, `make`, `wget`, an `aarch64-linux-gnu` cross toolchain, `python3` and Node.js 18+.
 
-1. Clone Circle at the commit this project was built against and apply the patch:
-   ```
-   git clone https://github.com/rsta2/circle.git
-   cd circle
-   git checkout 7a81e1b480fe7d19fc1fc695b89bff0a0848f44b
-   git apply /path/to/NAMberry/circle-patches/circle-namberry.patch
-   ```
-   The patch contains the changes made to Circle (RP1 I2S/DMA buffer alignment and cache handling, Wi-Fi access point support, exception-handler diagnostics, `ARM_ALLOW_MULTI_CORE` enabled and `MAX_TASKS` raised to 48, and the USB CDC driver change needed by the Live Display).
-2. In Circle's `Config.mk` set `PREFIX64 = aarch64-linux-gnu-`, `AARCH = 64`, `RASPPI = 5`, then build Circle and the add-ons used by the Makefile (`addon/wlan`, `addon/fatfs`, `addon/SDCard`, `addon/tftpfileserver`, `lib`).
-3. Copy this repository to `circle/addon/wlan/sample/pisound-wifi-test`.
-4. Copy `config_local.h.example` to `config_local.h` and put the address of your PC (syslog and OTA).
-5. Run `make`. The result is `kernel_2712.img`.
+**1. Build**
+
+* Circle at the tested commit, with the patch (RP1 I2S/DMA alignment and cache handling, access point support, exception diagnostics, multi-core, `MAX_TASKS` 48, USB CDC for the Live Display) and the Wi-Fi sources (a submodule):
+  ```
+  git clone https://github.com/rsta2/circle.git && cd circle
+  git checkout 7a81e1b480fe7d19fc1fc695b89bff0a0848f44b
+  git apply /path/to/NAMberry/circle-patches/circle-namberry.patch
+  git submodule update --init addon/wlan/hostap
+  printf 'PREFIX64 = aarch64-linux-gnu-\nAARCH = 64\nRASPPI = 5\n' > Config.mk
+  ```
+* Libraries and the Wi-Fi add-on:
+  ```
+  for d in lib lib/usb lib/input lib/fs lib/sched lib/net lib/sound addon/SDCard addon/fatfs addon/tftpfileserver; do make -C $d -j4 || break; done
+  (cd addon/wlan && ./makeall --nosample)
+  ```
+* This repository and the firmware:
+  ```
+  mkdir -p addon/wlan/sample/pisound-wifi-test
+  cp -a /path/to/NAMberry/. addon/wlan/sample/pisound-wifi-test/
+  cd addon/wlan/sample/pisound-wifi-test
+  cp config_local.h.example config_local.h     # set the address of your PC (syslog and OTA)
+  make -j4                                     # result: kernel_2712.img
+  ```
+
+**2. SD card** (FAT32, everything in the root)
+
+* Boot files: in `circle/boot` run `make`; copy `bcm2712-rpi-5-b.dtb`, `bcm2712d0-rpi-5-b.dtb`, `LICENCE.broadcom`, `bcm2712d0.dtbo` (into a folder `overlays/`), and `config64.txt` renamed to `config.txt`.
+* `kernel_2712.img` from step 1.
+* Wi-Fi firmware: in `circle/addon/wlan/firmware` run `make`; copy the downloaded files into a folder `firmware/`.
+* `wpa_supplicant.conf` (your home network):
+  ```
+  network={
+  	ssid="my-ssid"
+  	psk="my-password"
+  	proto=WPA2
+  	key_mgmt=WPA-PSK
+  }
+  ```
+* Optional `ap.cfg`, one line `NAME PASSWORD CHANNEL` (name 1-32 and password 8-63 characters from letters, digits, `_` `-` `.`; channel 1-13). Without it the board creates one: network `NAMberry5`, random password, written to `ap.cfg` on the card.
+* Optional `ota.key` for updates over Wi-Fi: `openssl rand -hex 32 > ota.key` (keep a copy on the PC).
+* NAM models, captures and impulse responses are not included: bring your own (step 4).
+
+**3. First start**
+
+* Put the card in, connect the Pisound, power on.
+* Home network joined: open `http://BOARD_ADDRESS/`. The address is in the syslog (`Network: address ...`, see step 5) or in your router's client list.
+* Home network not joined: the board opens its access point (name and password from `ap.cfg` on the card). Join it and open `http://192.168.4.1/`.
+
+**4. Models and impulse responses**
+
+* The page uploads them one by one. For a folder: `node tools/bulk_upload.js src/control_page.h FOLDER BOARD_IP [dry]`.
+  * `.nam` (A2 only, full quality) becomes `.adn`; `.wav` becomes `.air`; `.air` is sent as is.
+  * Names already on the board are skipped. `dry` converts and reports without sending.
+* One model without the board: `python3 tools/nam2adn.py model.nam`.
+
+**5. Updates over Wi-Fi**
+
+* Needs `ota.key` on the card and your PC's address as `OTA_ALLOWED_IP` in `config_local.h`.
+* Log (optional, also shows the board's address): `python3 tools/syslog_listener.py &`
+* Send: `python3 tools/ota_push.py kernel_2712.img --host BOARD_IP --key ota.key`
+* The board checks the signature, keeps the old kernel as `kernel_2712.bak` and reboots.
 
 ## Repository layout
 
 ```
-Makefile              builds the firmware (inside Circle's tree, see Building)
+Makefile              builds the firmware (inside Circle's tree, see Getting started)
 config_local.h.example  copy to config_local.h and edit
 src/                  the firmware: web server, pedalboard engine, effects (fx_*.cpp), MIDI, updates
 src/adel/             the DSP engines of the ADEL family (reverb, delay, harmonizer, ...)
 src/fxshim/           small replacements of the C++ library headers used by the engines on the bare-metal side
 display/              the Live Display: firmware (nb_display.ino), bring-up sketches, a test tool
 tests/                host tests (test_*.cpp), web page tests (test_*.js), host_shim/
-tools/                nam2adn.py (NAM to .adn), block_presets.py (block settings), tracker/ (pitch tracker bench), mkpagegz.py
+tools/                nam2adn.py (NAM to .adn), bulk_upload.js (models and IRs to the board), ota_push.py (update over Wi-Fi), syslog_listener.py, block_presets.py (block settings), tracker/ (pitch tracker bench), mkpagegz.py
 docs/                 screenshots and the sources of the block settings
 circle-patches/       the changes made to Circle
 EFFECTS.md  NOTICE.md  LICENSE
