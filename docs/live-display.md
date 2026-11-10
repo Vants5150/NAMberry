@@ -97,6 +97,8 @@ The chip's own factory flash was dumped before it was overwritten (4 MB, read ba
 
 Tried by hand on the author's unit: the screen, the touch on the data link with the NAMberry (stage, knobs, Cfg) and all four rotations.
 
+**Touch calibration.** The CST816D layer of this board covers less of the glass than the screen and is stretched: in landscape, a finger at the middle of the screen was read about 9 px too low, the top 15 to 20 px and the bottom 30 px of the glass give no distinct position. It was measured with a run of 12 crosses drawn on the screen (compile with `-DNB_CALIB`, press each cross, read the raw positions from the status page lines `cal ...`) and fitted with an affine map by least squares; the residuals are a few pixels, which is the repeatability of a finger. The inverse of that map is applied in `touchRaw` for the NiceMCU only (`-DNB_NICE`). The fit is for this unit and this finger; another unit may need its own run.
+
 ![The Stage screen of the preset "Nice Clean" on the NiceMCU 2.8", in a 3D-printed case, USB cable on the right](img/live_display_nice_stage.jpg)
 
 *Stage on the NiceMCU 2.8" (landscape): the preset name with `<` `>`, eight tiles on page 1 of 2, Presets / Cfg below.*
@@ -173,7 +175,7 @@ arduino-cli compile --fqbn esp32:esp32:esp32:PartitionScheme=min_spiffs display/
 * **Wi-Fi.** Nothing is stored in the sources. On the display: Cfg, Scan networks, choose, type the password on the screen keyboard. It is kept in the ESP32's flash (NVS) in clear text.
 * **Wi-Fi from a phone (captive portal).** When no network is saved, or the saved one does not connect within 30 s, the display opens its own open network `NAMberry-display`; join it with a phone, the page (or `http://192.168.4.1`) lists the networks, type the password there and press Connect. If the password is wrong the network comes back after about 30 s. Tried by hand on the NiceMCU (Wi-Fi setup and an over-the-air update); the code is the same for the other boards, which were not re-tested with it.
 * **Updates** afterwards go over Wi-Fi (ArduinoOTA, host `nb-display` for the S3, `nb-display-cyd` for the 4.0" and `nb-display-nice` for the NiceMCU) with `espota.py`, with the cable still on the board. Without a password anyone on the network can load firmware into the display: set `OTA_PASSWORD` in `wifi_config.h`.
-* **Which firmware is running?** The screen shows `fw <number>` and the build time (Cfg and the waiting screen), and `http://<display address>/` answers in plain text with the version, build time, uptime, a few counters and the last presses of the touch. Check it after every update: an update that did not arrive looks the same as one that did. The page has no authentication.
+* **Which firmware is running?** The screen shows `fw <number>` and the build time (Cfg and the waiting screen), and `http://<display address>/` answers in plain text with the version, build time, uptime, a few counters, the last presses of the touch, the rotation and the last screen changes (`scr from->to`). Check it after every update: an update that did not arrive looks the same as one that did. The page has no authentication.
 
 `display/bringup/` holds the two sketches used to bring the S3 up (pins and init; a ping/pong test of the link). `display/tools/fake_namberry.py` plays the board's side of the protocol on a PC to test a display alone; `display/tools/bridge_namberry.py` plays it and forwards the requests to the real board over its web interface, so a display can be tried before the board has the link.
 

@@ -94,6 +94,11 @@ static String g_rxInfo;					// result of the last reply received (bytes and time
 static bool g_fxOk = false;				// the effect definitions have been read
 static volatile unsigned g_nDraw = 0, g_nFull = 0, g_nKnob = 0, g_nTile = 0, g_nDyn = 0, g_nPoll = 0;	// how often each drawing step ran (read on the status page)
 static char g_lastFullView[96];		// a plain array: the status page reads it from another task
+static char g_slog[8][48];				// the last screen changes, for the status page: time, from -> to, and which press was the last one
+static uint8_t g_slogN = 0;
+static char g_cal[12][48];				// touch calibration run (-DNB_CALIB): target in the screen frame -> raw portrait position measured
+static bool g_swallowUp = false;				// the press that is still down already acted (it changed the screen): its lift must not act again
+static int g_rot = 0;					// screen rotation 0..3 as TFT_eSPI setRotation (0/2 portrait, 1/3 landscape), saved in NVS namespace "nbui"
 static char g_tlog[8][72];				// the last presses, for the status page: result, duration, start, end, strongest pressure, samples
 static uint8_t g_tlogN = 0;
 static void draw ();
@@ -778,6 +783,10 @@ static void netTask (void *)
 						+ "\nview " + g_lastFullView + "\n";
 					for (int i = 0; i < 8; i++)
 							if (g_tlog[(g_tlogN + i) & 7][0]) s += "touch " + String (g_tlog[(g_tlogN + i) & 7]) + "\n";		// the last presses, oldest first: T tap, S swipe, H sideways, L long, x ignored
+					for (int i = 0; i < 12; i++) if (g_cal[i][0]) s += "cal " + String (g_cal[i]) + "\n";
+					s += "rot " + String (g_rot) + " size " + String (tft.width ()) + "x" + String (tft.height ()) + "\n";
+					for (int i = 0; i < 8; i++)
+							if (g_slog[(g_slogN + i) & 7][0]) s += "scr " + String (g_slog[(g_slogN + i) & 7]) + "\n";		// screens: 0 params 1 cfg 5 edit 6 presets 7 stage
 					g_web.send (200, "text/plain", s);
 				});
 				g_web.begin ();
@@ -798,7 +807,6 @@ static void wifiLoop ()
 }
 
 // ---------------------------------------------------------------- touch
-static int g_rot = 0;					// screen rotation 0..3 as TFT_eSPI setRotation (0/2 portrait, 1/3 landscape), saved in NVS namespace "nbui"
 
 // the touch panel reports the position in the portrait frame (x 0..NB_W0-1, y 0..NB_H0-1); this gives the position in the frame of the current rotation
 // (rotation 1 = MADCTL MV, 3 = MX|MY|MV, 2 = MY, as in TFT_eSPI's ILI9341 driver; the portrait one is verified, the landscape ones follow from the same table)
@@ -830,6 +838,20 @@ static bool touchRaw (int *rx, int *ry, bool held)
 	{
 		*rx = ((t[1] & 0x0F) << 8) | t[2];
 		*ry = ((t[3] & 0x0F) << 8) | t[4];
+#if defined(NB_NICE) && !defined(NB_CALIB)
+		// The NiceMCU's touch layer covers less than the glass and is stretched: the raw values were measured against crosses drawn on the screen (12 presses, landscape)
+		// and fitted with an affine map: ry = 1.0472 x + 0.0632 y - 8.41, rx = 0.0105 x - 1.2937 y + 267.13 (x, y in the landscape frame). Here the inverse, written back in the raw frame.
+		{
+			const float a1 = 1.0472f, b1 = 0.0632f, c1 = -8.4144f, a2 = 0.0105f, b2 = -1.2937f, c2 = 267.1338f;
+			const float det = a1 * b2 - b1 * a2;
+			const float dy = (float) *ry - c1, dx = (float) *rx - c2;
+			float x = (b2 * dy - b1 * dx) / det, y = (a1 * dx - a2 * dy) / det;
+			x = x < 0 ? 0 : (x > (float) (NB_H0 - 1) ? (float) (NB_H0 - 1) : x);
+			y = y < 0 ? 0 : (y > (float) (NB_W0 - 1) ? (float) (NB_W0 - 1) : y);
+			*rx = (NB_W0 - 1) - (int) (y + 0.5f);
+			*ry = (int) (x + 0.5f);
+		}
+#endif
 		return true;
 	}
 	return false;
@@ -2174,9 +2196,58 @@ void setup ()
 	draw ();
 }
 
+#ifdef NB_CALIB
+// touch calibration run: nine crosses on the rotation 1 screen (320 x 240), one at a time; the raw portrait position of each press is kept for the status page
+static bool calibLoop ()
+{
+	static int step = 0, n = 0;
+	static long sx = 0, sy = 0;
+	static bool drawn = false, down = false;
+	static const int TX[12] = {40, 280, 80, 240, 120, 200, 160, 60, 260, 100, 220, 140}, TY[12] = {40, 190, 150, 60, 90, 170, 120, 110, 130, 190, 40, 60};
+	if (step >= 12) { tft.fillScreen (TFT_BLACK); tft.setTextColor (TFT_WHITE, TFT_BLACK); tft.drawString ("calibration done", 60, 110, 4); return true; }
+	if (!drawn)
+	{
+		tft.fillScreen (TFT_BLACK);
+		tft.drawLine (TX[step] - 14, TY[step], TX[step] + 14, TY[step], TFT_WHITE);
+		tft.drawLine (TX[step], TY[step] - 14, TX[step], TY[step] + 14, TFT_WHITE);
+		tft.drawCircle (TX[step], TY[step], 6, TFT_GREEN);
+		drawn = true; down = false; n = 0; sx = sy = 0;
+	}
+	int rx, ry;
+	if (touchRaw (&rx, &ry, down))
+	{
+		down = true;
+		if (n < 40) { sx += rx; sy += ry; n++; }
+	}
+	else if (down)
+	{
+		if (n >= 5)
+		{
+			snprintf (g_cal[step], sizeof g_cal[0], "%d,%d -> raw %ld,%ld n %d", TX[step], TY[step], sx / n, sy / n, n);
+			step++; drawn = false;
+		}
+		else { down = false; n = 0; sx = sy = 0; }
+	}
+	delay (5);
+	return true;
+}
+#endif
+
 void loop ()
 {
+#ifdef NB_CALIB
+	if (calibLoop ()) return;
+#endif
 	g_scanBusy = g_scanning || g_scr == SCR_BUSY;
+	{
+		static Screen prevScr = SCR_STAGE;
+		if (g_scr != prevScr)
+		{
+			snprintf (g_slog[g_slogN & 7], sizeof g_slog[0], "%lu %d->%d", (unsigned long) (millis () / 1000), (int) prevScr, (int) g_scr);
+			g_slogN++;
+			prevScr = g_scr;
+		}
+	}
 	wifiLoop ();
 	scanLoop ();
 	connectLoop ();
@@ -2233,9 +2304,11 @@ void loop ()
 		{
 			ensureDefs ();		// the definitions of the effects of this preset, if the board does not have them yet
 			// rebuild the lists when the preset or its blocks changed
-			String key = String (g_st["pc"] | "") + String ((int) (g_st["pd"] | 0)) + String (g_st["board"]["s"] | 0);
-			const bool changed = key != g_blocksKey;
 			buildBlocks ();
+			// the preset or its set of blocks changed (not just a value: the first edit of a parameter marks the preset as modified, and that must not throw the user out of the knobs screen)
+			String key = String (g_st["pc"] | "");
+			for (const BlockRef &b : g_blocks) key += "|" + String (b.id) + "," + String (b.r) + "," + String (b.c);
+			const bool changed = key != g_blocksKey;
 			if (changed)
 			{
 				g_blocksKey = key;
@@ -2263,8 +2336,12 @@ void loop ()
 	const bool listScr = g_scr == SCR_STAGE || g_scr == SCR_PARAMS || g_scr == SCR_PRESETS || g_scr == SCR_SCAN || g_scr == SCR_FILES || g_scr == SCR_TYPES;
 	if (!listScr)
 	{
+		const Screen before = g_scr;
 		if (touchPress (&x, &y)) onTouch (x, y);
 		g_trk.ended = false;		// a press that ended here must not act later, on a list screen
+		// a press that took us to a list screen (Back from the editor to the knobs) must not also act there when the finger is lifted: lists act on the lift,
+		// and the lift would hit the same footer button of the new screen (Back again, to the stage)
+		if (g_scr != before && g_trk.down) g_swallowUp = true;
 	}
 	else
 	{
@@ -2272,6 +2349,11 @@ void loop ()
 		// on the stage screen a long press on a block opens its knobs. The press is followed by the touch tracker, which also saw the ones that began and ended
 		// while the program was waiting for the board.
 		g_trk.pressed = false;
+		if (g_swallowUp)
+		{
+			if (g_trk.ended) { g_trk.ended = false; g_swallowUp = false; }
+			else if (!g_trk.down) g_swallowUp = false;
+		}
 		if (g_trk.down && g_scr == SCR_STAGE && !g_trk.longDone && millis () - g_trk.t0 > 600 && abs (g_trk.lx - g_trk.sx) < TAP_SLOP && abs (g_trk.ly - g_trk.sy) < TAP_SLOP)
 		{
 			g_trk.longDone = true;
