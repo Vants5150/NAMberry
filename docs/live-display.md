@@ -87,7 +87,7 @@ The chip's own factory flash was dumped before it was overwritten (4 MB, read ba
 | Screen pins | MOSI 13, SCLK 14, CS 15, DC 12, RST 2 (shared with the touch reset), backlight 25 (high = on). Taken from the public CYDesk board configuration for this board; the screen works with them |
 | Touch | capacitive CST816D at I2C address 0x15, SDA 33, SCL 32, read by the sketch (the same I2C touch path as the S3). The I2C pins were read from the factory firmware's log |
 
-Tried by hand on the author's unit: the screen, and the touch on the data link with the NAMberry (stage, knobs, Cfg). **Not checked:** the touch mapping in the rotations 1 to 3 (the table was written for the ILI9341).
+Tried by hand on the author's unit: the screen, the touch on the data link with the NAMberry (stage, knobs, Cfg) and all four rotations.
 
 ## How it is connected
 
@@ -147,7 +147,7 @@ arduino-cli compile --fqbn esp32:esp32:esp32:PartitionScheme=min_spiffs display/
 
 * **First load, over USB.** S3: `esptool --no-stub write-flash 0x10000 nb_display.ino.bin` (`--no-stub` is needed with this chip's USB Serial/JTAG for reads). 4.0": `esptool --baud 460800 write-flash 0x0 nb_display.ino.merged.bin` (the whole image the first time, it sets the partition table). Later USB loads should write **only the application** (S3: 0x10000; 4.0": 0x10000 too), because writing from address 0 erases the area where the display keeps the Wi-Fi network, and it has to be typed again.
 * **Wi-Fi.** Nothing is stored in the sources. On the display: Cfg, Scan networks, choose, type the password on the screen keyboard. It is kept in the ESP32's flash (NVS) in clear text.
-* **Wi-Fi from a phone (captive portal).** When no network is saved, or the saved one does not connect within 30 s, the display opens its own open network `NAMberry-display`; join it with a phone, the page (or `http://192.168.4.1`) lists the networks, type the password there and press Connect. If the password is wrong the network comes back after about 30 s. Tried on the NiceMCU only; the code is the same for the other boards, which were not re-tested with it.
+* **Wi-Fi from a phone (captive portal).** When no network is saved, or the saved one does not connect within 30 s, the display opens its own open network `NAMberry-display`; join it with a phone, the page (or `http://192.168.4.1`) lists the networks, type the password there and press Connect. If the password is wrong the network comes back after about 30 s. Tried by hand on the NiceMCU (Wi-Fi setup and an over-the-air update); the code is the same for the other boards, which were not re-tested with it.
 * **Updates** afterwards go over Wi-Fi (ArduinoOTA, host `nb-display` for the S3, `nb-display-cyd` for the 4.0" and `nb-display-nice` for the NiceMCU) with `espota.py`, with the cable still on the board. Without a password anyone on the network can load firmware into the display: set `OTA_PASSWORD` in `wifi_config.h`.
 * **Which firmware is running?** The screen shows `fw <number>` and the build time (Cfg and the waiting screen), and `http://<display address>/` answers in plain text with the version, build time, uptime, a few counters and the last presses of the touch. Check it after every update: an update that did not arrive looks the same as one that did. The page has no authentication.
 
