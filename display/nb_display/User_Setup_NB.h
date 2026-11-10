@@ -20,6 +20,26 @@
 #define TFT_BACKLIGHT_ON HIGH
 #define USE_HSPI_PORT			// the LCD works on HSPI, not on FSPI
 #define SPI_FREQUENCY 40000000
+#elif defined(NB_NICE)
+// ---- NiceMCU-32S-DEV 2.8IPS V2.0 (XH-32S module, ESP32-D0WD-V3, 4 MB): ST7789 240 x 320, capacitive touch CST816D on I2C (read by the sketch, not by TFT_eSPI)
+// compile with the flag -DNB_NICE. The pins are those of the public CYDesk board config for this board (github.com/JazzActual/CYDesk, pull request 10);
+// only the touch I2C pins (SDA 33, SCL 32) were checked on our board (the factory firmware logs them), the others are checked by what the screen shows
+#define USER_SETUP_INFO "NAMberry display NiceMCU 2.8"
+#define ST7789_DRIVER
+#define TFT_RGB_ORDER TFT_BGR
+#define TFT_INVERSION_ON
+#define TFT_WIDTH  240
+#define TFT_HEIGHT 320
+#define TFT_MISO -1			// the panel is write-only
+#define TFT_MOSI 13
+#define TFT_SCLK 14
+#define TFT_CS   15
+#define TFT_DC   12
+#define TFT_RST   2			// shared with the touch controller's reset
+#define TFT_BL   25
+#define TFT_BACKLIGHT_ON HIGH
+#define USE_HSPI_PORT
+#define SPI_FREQUENCY 24000000
 #else
 // ---- Freenove ESP32 CYD 4.0" FNK0114S: ST7796 320 x 480, resistive touch XPT2046 on the same SPI bus
 #define USER_SETUP_INFO "NAMberry display CYD 4.0"

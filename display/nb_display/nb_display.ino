@@ -9,6 +9,7 @@
 #include <Preferences.h>
 #include <ArduinoOTA.h>
 #include <WebServer.h>
+#include <DNSServer.h>
 #include <TFT_eSPI.h>
 #include <ArduinoJson.h>
 #include <vector>
@@ -29,12 +30,14 @@ struct Row
 struct FieldSpec { const char *type, *key; float mn, mx, st; int kind; };
 
 // raise the number at every change: the screen shows it with the build time, so the firmware that runs is always known
-#define FW_NUM "12.6"
+#define FW_NUM "13.2"
 #define FW_NAME "nb_display v" FW_NUM
 #define FW_BUILD __DATE__ " " __TIME__
 
 // ---------------------------------------------------------------- the board
 #ifdef ARDUINO_ESP32S3_DEV
+#define NB_CAP				// capacitive touch on I2C
+#define TP_ADDR 0x38			// FT6336
 #define NB_S3				// ESP32-S3: capacitive touch FT6336 on I2C, native USB serial, PSRAM
 // pins (verified on the board, see docs/live-display.md)
 #define TP_SDA 16
@@ -45,6 +48,19 @@ struct FieldSpec { const char *type, *key; float mn, mx, st; int kind; };
 #define NB_H0 320
 static const size_t RX_CAP = 200 * 1024;		// reply buffer
 #else
+#ifdef NB_NICE
+// NiceMCU-32S-DEV 2.8IPS V2.0 (compile with -DNB_NICE): ESP32 with a CH340 UART bridge and no PSRAM like the CYD, ST7789 240 x 320 and capacitive CST816D like the S3
+#define NB_CYD
+#define NB_CAP
+#define TP_SDA 33
+#define TP_SCL 32
+#define TP_ADDR 0x15			// CST816D: same register layout as the FT6336 from 0x02 (finger count, X high/low, Y high/low)
+static const size_t RX_CAP = 24 * 1024;
+#define NB_W0 240
+#define NB_H0 320
+#define NB_BAUD 460800
+#else
+#define NB_RESISTIVE
 #define NB_CYD				// ESP32 CYD 4.0": resistive touch XPT2046 on the TFT's SPI bus (TOUCH_CS in the TFT_eSPI setup), UART0 through a CH340, no PSRAM
 static const size_t RX_CAP = 24 * 1024;			// the biggest reply is the model library, about 12 KB
 #define NB_W0 320			// the screen in portrait: 320 x 480
@@ -52,6 +68,7 @@ static const size_t RX_CAP = 24 * 1024;			// the biggest reply is the model libr
 #define NB_BAUD 460800			// speed of the UART link (921600 gave read errors with esptool on this CH340) (must match SER_BAUD in the board's kernel.cpp)
 // resistive touch: raw readings of the corners, from Freenove's example for this screen (calibration data {303, 3458, 350, 3304, 7} for rotation 1)
 static const int TCAL_X0 = 303, TCAL_XR = 3458, TCAL_Y0 = 350, TCAL_YR = 3304;
+#endif
 #endif
 
 static TFT_eSPI tftHw;
@@ -104,6 +121,7 @@ static bool readLine (char *out, size_t cap, uint32_t timeoutMs)
 // sends a request and reads the reply body into g_rx. Returns the HTTP status (200 = ok) or -1 on a timeout / bad frame.
 static int rpc (bool post, const char *path, const char *form, size_t *pLen, uint32_t timeoutMs = 4000)
 {
+	if (!g_lastAnswer && timeoutMs > 2500) timeoutMs = 2500;		// the board never answered since the start: do not stay deaf to the touch for long (Wi-Fi setup must stay reachable)
 	while (Serial.available ()) Serial.read ();		// stale bytes (hello lines)
 	const uint32_t id = ++g_reqId;
 	Serial.printf ("Q %lu %c %s %s\n", (unsigned long) id, post ? 'P' : 'G', path, form ? form : "");
@@ -340,6 +358,33 @@ static String fmtVal (JsonObject p, float v)
 	return s;
 }
 
+// Bypass behaviour of a block (as the Fractal FM3's Bypass Mode): what the block does when it is off. The board's "byp" key, 0..4.
+static const char *const BYP_NAMES[5] = {"Thru", "Mute FX In", "Mute FX Out", "Mute In", "Mute Out"};
+static const char *const BYP_SHORT[5] = {"Thru", "FXIn", "FXOut", "MIn", "MOut"};		// the knob has room for five characters
+static JsonDocument g_bypDoc;
+static JsonArray bypNames ()
+{
+	if (g_bypDoc.isNull ())
+	{
+		JsonArray a = g_bypDoc.to<JsonArray> ();
+		for (const char *n : BYP_NAMES) a.add (n);
+	}
+	return g_bypDoc.as<JsonArray> ();
+}
+
+// NAM and effect blocks (not the Selector) have a bypass behaviour
+static void addBypRow (JsonObject b)
+{
+	const char *t = b["t"] | "";
+	if (!(!strcmp (t, "nam") || (!strcmp (t, "fx") && strcmp (b["fx"] | "", "selector")))) return;
+	g_rows.push_back ({"Bypass", "", TFT_ORANGE, true});
+	Row r = {"Bypass", "", TFT_WHITE, false};
+	r.edit = true; r.key = "byp"; r.kind = 1; r.e = bypNames ();
+	r.v = (float) (int) (b["byp"] | 0); r.mn = 0; r.mx = 4; r.st = 1;
+	r.value = fmtNum (r, r.v);
+	g_rows.push_back (r);
+}
+
 static void buildRowsRaw (JsonObject b)
 {
 	g_rows.clear ();
@@ -379,13 +424,14 @@ static void buildRowsRaw (JsonObject b)
 			}
 			i++;
 		}
+		addBypRow (b);
 		return;
 	}
 	// other blocks: show their fields as they come
 	for (JsonPair kv : b)
 	{
 		const char *k = kv.key ().c_str ();
-		if (!strcmp (k, "id") || !strcmp (k, "t") || !strcmp (k, "on")) continue;
+		if (!strcmp (k, "id") || !strcmp (k, "t") || !strcmp (k, "on") || !strcmp (k, "byp")) continue;
 		const FieldSpec *fs = nullptr;
 		for (const FieldSpec &f : FIELDS) if (!strcmp (f.type, t) && !strcmp (f.key, k)) fs = &f;
 		if (fs)
@@ -405,6 +451,7 @@ static void buildRowsRaw (JsonObject b)
 		else continue;
 		g_rows.push_back ({String (k), v, TFT_LIGHTGREY, false});
 	}
+	addBypRow (b);
 }
 
 static void buildRows (JsonObject b)
@@ -553,6 +600,8 @@ static bool npRun ()
 static Preferences g_prefs;
 static String g_ssid, g_pass;			// the saved network (NVS, namespace "nbd")
 static bool g_wifiWanted = false, g_otaStarted = false, g_otaBusy = false;
+static volatile uint32_t g_tConn = 0;			// when the last connection attempt started (captive portal waits 30 s after it)
+static volatile bool g_scanBusy = false;			// the on-screen Wi-Fi scan / connect is running: the portal must not touch the radio
 static String g_wifiMsg = "Wi-Fi: not set (Cfg)";
 
 static void drawOtaProgress (unsigned pct)
@@ -567,6 +616,7 @@ static void drawOtaProgress (unsigned pct)
 static void wifiConnect (const String &ssid, const String &pass)
 {
 	g_wifiWanted = true;
+	g_tConn = millis ();
 	WiFi.mode (WIFI_STA);
 	WiFi.setSleep (false);				// no modem power saving: its latency made the firmware updates fail
 	WiFi.setHostname (OTA_HOSTNAME);
@@ -606,14 +656,107 @@ static void wifiForget ()
 
 static volatile unsigned g_otaPct = 0;
 
+// ---- Wi-Fi setup from a phone (captive portal): when no network is saved, or the saved one does not connect within 30 s, the board opens its own network
+// (PORTAL_SSID, no password) and answers every address with a page where the network is chosen and its password typed on the phone.
+static const char *PORTAL_SSID = "NAMberry-display";
+static DNSServer g_dns;
+static WebServer *g_portal = nullptr;
+static volatile bool g_portalOn = false;
+static String g_portalList;					// <option> list of the networks seen at the last scan
+static volatile bool g_portalGo = false;			// a network was submitted: connect to it
+static String g_portalSsid, g_portalPass;
+
+static String htmlEsc (const String &s)
+{
+	String o;
+	for (size_t i = 0; i < s.length (); i++)
+	{
+		const char c = s[i];
+		if (c == '<') o += "&lt;"; else if (c == '>') o += "&gt;"; else if (c == '&') o += "&amp;"; else if (c == '"') o += "&quot;"; else o += c;
+	}
+	return o;
+}
+
+static void portalScan ()
+{
+	String l;
+	const int n = WiFi.scanNetworks ();
+	for (int i = 0; i < n && i < 25; i++)
+	{
+		const String s = WiFi.SSID (i);
+		if (s.length () && l.indexOf ("\"" + htmlEsc (s) + "\"") < 0) l += "<option value=\"" + htmlEsc (s) + "\">" + htmlEsc (s) + " (" + String (WiFi.RSSI (i)) + " dBm)</option>";
+	}
+	WiFi.scanDelete ();
+	g_portalList = l;
+}
+
+static void portalPage ()
+{
+	String h = "<!doctype html><html><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>NAMberry display</title>"
+		"<style>body{font-family:sans-serif;margin:16px;max-width:420px}input,select,button{width:100%;font-size:18px;padding:10px;margin:6px 0;box-sizing:border-box}</style></head><body>"
+		"<h2>NAMberry display Wi-Fi</h2><form method=post action=/save><label>Network</label><select name=s>" + g_portalList +
+		"</select><label>or type its name</label><input name=m placeholder='(leave empty to use the list)'><label>Password</label><input name=p type=password autocomplete=off>"
+		"<button type=submit>Connect</button></form><form method=get action=/rescan><button>Scan again</button></form></body></html>";
+	g_portal->send (200, "text/html", h);
+}
+
+static void portalStart ()
+{
+	WiFi.mode (WIFI_AP_STA);
+	portalScan ();
+	WiFi.softAP (PORTAL_SSID);
+	g_dns.start (53, "*", WiFi.softAPIP ());
+	g_portal = new WebServer (80);
+	g_portal->on ("/", portalPage);
+	g_portal->on ("/rescan", [] () { portalScan (); g_portal->sendHeader ("Location", "/"); g_portal->send (302, "text/plain", ""); });
+	g_portal->on ("/save", HTTP_POST, [] ()
+	{
+		String s = g_portal->arg ("m"); s.trim ();
+		if (!s.length ()) s = g_portal->arg ("s");
+		if (!s.length ()) { g_portal->sendHeader ("Location", "/"); g_portal->send (302, "text/plain", ""); return; }
+		g_portalSsid = s; g_portalPass = g_portal->arg ("p");
+		g_portal->send (200, "text/html", "<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'><body style='font-family:sans-serif;margin:16px'><h2>Connecting...</h2>"
+			"<p>The display is joining the network. This page will stop answering: reconnect your phone to your normal Wi-Fi. The display shows its address when it is connected. "
+			"If the password was wrong, the network <b>NAMberry-display</b> comes back in about 30 seconds.</p></body>");
+		g_portalGo = true;
+	});
+	g_portal->onNotFound ([] () { g_portal->sendHeader ("Location", String ("http://") + WiFi.softAPIP ().toString () + "/"); g_portal->send (302, "text/plain", ""); });	// every probe of the phone's "is there internet" check lands on the page
+	g_portal->begin ();
+	g_portalOn = true;
+	g_wifiMsg = String ("Setup: join Wi-Fi ") + PORTAL_SSID;
+}
+
+static void portalStop ()
+{
+	g_portalOn = false;
+	if (g_portal) { g_portal->stop (); delete g_portal; g_portal = nullptr; }
+	g_dns.stop ();
+	WiFi.softAPdisconnect (true);
+}
+
 // The firmware update (ArduinoOTA) and the status page run in their own task, so they answer even when the main loop is busy on the serial link or the screen.
 // The task never draws: it only sets g_otaBusy / g_otaPct, the main loop shows the progress.
 static void netTask (void *)
 {
 	for (;;)
 	{
+		if (g_portalOn)
+		{
+			g_dns.processNextRequest ();
+			if (g_portal) g_portal->handleClient ();
+			if (g_portalGo)
+			{
+				g_portalGo = false;
+				vTaskDelay (pdMS_TO_TICKS (1500));		// the "Connecting" page must reach the phone before the access point goes away
+				portalStop ();
+				wifiSave (g_portalSsid, g_portalPass);
+				wifiConnect (g_portalSsid, g_portalPass);
+			}
+		}
+		else if (WiFi.status () != WL_CONNECTED && !g_otaBusy && !g_scanBusy && (!g_ssid.length () || millis () - g_tConn > 30000) && millis () > 3000) portalStart ();
 		if (g_wifiWanted && WiFi.status () == WL_CONNECTED)
 		{
+			if (g_portalOn) portalStop ();
 			if (!g_otaStarted)
 			{
 				ArduinoOTA.setHostname (OTA_HOSTNAME);
@@ -649,6 +792,7 @@ static void netTask (void *)
 
 static void wifiLoop ()
 {
+	if (g_portalOn) { g_wifiMsg = String ("Setup: join Wi-Fi ") + PORTAL_SSID; return; }
 	if (!g_wifiWanted) return;
 	g_wifiMsg = WiFi.status () == WL_CONNECTED ? "Wi-Fi: " + WiFi.localIP ().toString () : String ("Wi-Fi: not connected");
 }
@@ -669,7 +813,7 @@ static void mapTouch (int rx, int ry, int *px, int *py)
 	}
 }
 static volatile uint16_t g_lastZ = 0;			// pressure of the last touch reading (0 on the capacitive screen)
-#ifdef NB_S3
+#ifdef NB_CAP
 static uint8_t i2cRead (uint8_t addr, uint8_t reg, uint8_t *out, uint8_t n)
 {
 	Wire.beginTransmission (addr);
@@ -682,7 +826,7 @@ static uint8_t i2cRead (uint8_t addr, uint8_t reg, uint8_t *out, uint8_t n)
 static bool touchRaw (int *rx, int *ry, bool held)
 {
 	uint8_t t[5];
-	if (i2cRead (0x38, 0x02, t, 5) == 5 && (t[0] & 0x0F) == 1)
+	if (i2cRead (TP_ADDR, 0x02, t, 5) == 5 && (t[0] & 0x0F) == 1)
 	{
 		*rx = ((t[1] & 0x0F) << 8) | t[2];
 		*ry = ((t[3] & 0x0F) << 8) | t[4];
@@ -716,7 +860,7 @@ static bool touchRaw (int *rx, int *ry, bool held)
 // ---------------------------------------------------------------- touch tracker
 // The touch is sampled every time touchPoll () runs, also while the program waits for a reply of the board (rpc) and not only once per turn of loop (): a short tap that
 // readings to wait for after the contact before a press counts, and how far the finger may move for it to be a tap or a long press
-#ifdef NB_CYD
+#ifdef NB_RESISTIVE
 static const int SETTLE_N = 3, TAP_SLOP = 20;
 #else
 static const int SETTLE_N = 1, TAP_SLOP = 14;
@@ -759,7 +903,7 @@ static void touchPoll ()
 		g_trk.n++;
 		// A resistive screen reads positions 20-30 px off while the pressure rises and falls (the log of the status page showed it): a reading counts only when the
 		// pressure is at least half of the strongest of this press (and above a minimum). The press begins with the first good readings and ends at the last one.
-#ifdef NB_CYD
+#ifdef NB_RESISTIVE
 		const bool good = g_lastZ >= (g_trk.zmax / 2 > 400 ? g_trk.zmax / 2 : 400);
 #else
 		const bool good = true;
@@ -921,13 +1065,16 @@ static void drawKeyboard ()
 static int g_stagePg = 0;				// page of the four switches of the stage screen
 static uint16_t rgb (int r, int g, int b) { return tft.color565 (r, g, b); }
 
-// 0 NAM, 1 dynamics / tone, 2 modulation, 3 time (delay, reverb), by the key of the effect
+// 0 NAM, 1 utility / system, 2 modulation, 3 delay, 4 reverb, 5 drive, by the key of the effect
 static int catOfKey (const String &key)
 {
 	if (key == "nam") return 0;
 	String f = key;
 	f.toLowerCase ();
-	if (f.indexOf ("delay") >= 0 || f.indexOf ("verb") >= 0 || f.indexOf ("echo") >= 0 || f.indexOf ("spring") >= 0 || f.indexOf ("dm2") >= 0 || f == "ad9") return 3;
+	if (f.indexOf ("verb") >= 0 || f.indexOf ("spring") >= 0) return 4;		// reverbs, springs included
+	if (f.indexOf ("delay") >= 0 || f.indexOf ("echo") >= 0 || f.indexOf ("dm2") >= 0 || f == "ad9") return 3;
+	static const char *const DRV[] = {"tsdrive", "tubescreamer", "ratts", "muff", "fuzzface", "centaur", "bluesdrv", "ds1", "ocd", "guvnor", "rangemaster", "fz1", "bender", "fuzzfactory", "booster"};
+	for (const char *d : DRV) if (f == d) return 5;				// distortions, overdrives, fuzzes, boosters
 	if (f.indexOf ("chorus") >= 0 || f.indexOf ("phase") >= 0 || f.indexOf ("flang") >= 0 || f.indexOf ("trem") >= 0 || f.indexOf ("vibe") >= 0
 	    || f.indexOf ("secondhand") >= 0 || f.indexOf ("dimension") >= 0 || f.indexOf ("pitch") >= 0 || f.indexOf ("harm") >= 0 || f.indexOf ("shifter") >= 0
 	    || f == "ce1" || f == "ce2" || f == "rotary") return 2;
@@ -942,8 +1089,10 @@ static int blockCat (JsonObject b)
 
 static void catColors (int cat, bool on, uint16_t *bg, uint16_t *fg, uint16_t *sub)
 {
-	static const int C[4][3][3] = {{{15, 110, 86}, {255, 255, 255}, {93, 202, 165}}, {{24, 95, 165}, {255, 255, 255}, {133, 183, 235}},
-				       {{83, 74, 183}, {255, 255, 255}, {175, 169, 236}}, {{133, 79, 11}, {255, 255, 255}, {250, 199, 117}}};
+	// NAM teal, utility / system white, modulation yellow, delay blue, reverb green, drive orange
+	static const int C[6][3][3] = {{{15, 110, 86}, {255, 255, 255}, {93, 202, 165}}, {{225, 228, 232}, {20, 24, 30}, {80, 86, 94}},
+				       {{214, 170, 20}, {30, 24, 0}, {85, 68, 0}}, {{24, 95, 165}, {255, 255, 255}, {133, 183, 235}},
+				       {{59, 109, 17}, {255, 255, 255}, {192, 221, 151}}, {{214, 100, 20}, {255, 255, 255}, {255, 215, 170}}};
 	if (!on) { *bg = rgb (35, 39, 45); *fg = rgb (138, 144, 153); *sub = rgb (107, 112, 120); return; }
 	*bg = rgb (C[cat][0][0], C[cat][0][1], C[cat][0][2]);
 	*fg = rgb (C[cat][1][0], C[cat][1][1], C[cat][1][2]);
@@ -1086,6 +1235,7 @@ static void knobCell (int i, int *x, int *y, int *w, int *h)
 
 static String knobText (const Row &r)
 {
+	if (r.key == "byp") { const int i = (int) lroundf (r.v); return BYP_SHORT[i < 0 ? 0 : (i > 4 ? 4 : i)]; }
 	if (r.kind == 1 || r.kind == 2) return fmtNum (r, r.v).substring (0, 5);
 	const int dec = r.st >= 1.0f ? 0 : (r.st >= 0.1f ? 1 : 2);
 	return String (r.v, dec);
@@ -1427,9 +1577,17 @@ static void draw ()
 			if (k >= (int) g_typeIdx.size ()) break;
 			const int y = ROW_Y + i * ROW_H;
 			const NewBlock &nb = g_types[g_typeIdx[k]];
-			tft.setTextColor (nb.key == g_nb[g_npSlot].key ? TFT_GREEN : TFT_WHITE, TFT_BLACK);
-			tft.drawString (nb.title.substring (0, (SW - 12) / 8), 8, y + 10, 2);
-			tft.drawFastHLine (0, y + ROW_H - 1, SW, 0x2104);
+			// the row has the colour of the type of the effect, as its tile on the stage screen (NAM teal, dynamics and tone blue, modulation purple, delay amber, reverb green)
+			uint16_t bg = rgb (23, 26, 31), fg = TFT_WHITE, sub = TFT_LIGHTGREY;
+			if (nb.key.length ()) catColors (catOfKey (nb.key), true, &bg, &fg, &sub);
+			tft.fillRoundRect (4, y + 2, SW - 8, ROW_H - 4, 6, bg);
+			if (nb.key == g_nb[g_npSlot].key)		// the one chosen for this slot: a white frame
+			{
+				tft.drawRoundRect (4, y + 2, SW - 8, ROW_H - 4, 6, TFT_WHITE);
+				tft.drawRoundRect (5, y + 3, SW - 10, ROW_H - 6, 5, TFT_WHITE);
+			}
+			tft.setTextColor (fg, bg);
+			tft.drawString (nb.title.substring (0, (SW - 28) / 8), 14, y + (ROW_H - 16) / 2, 2);
 		}
 		drawFooter ("< Back", "Filter", String (g_page + 1) + "/" + String (pages > 0 ? pages : 1), "");
 		g_dirty = false;
@@ -2001,6 +2159,10 @@ void setup ()
 	Serial.begin (NB_BAUD);
 #endif
 	tft.init ();
+#ifdef NB_NICE
+	delay (60);				// the touch chip shares the panel reset (GPIO 2), which tft.init () has just pulsed: it needs a moment before its first I2C access
+	Wire.begin (TP_SDA, TP_SCL, 400000);
+#endif
 	g_prefs.begin ("nbui", true); g_rot = g_prefs.getInt ("rot", 0) & 3; g_prefs.end ();
 	tft.setRotation (g_rot);
 	applyLayout ();
@@ -2014,6 +2176,7 @@ void setup ()
 
 void loop ()
 {
+	g_scanBusy = g_scanning || g_scr == SCR_BUSY;
 	wifiLoop ();
 	scanLoop ();
 	connectLoop ();
@@ -2027,6 +2190,25 @@ void loop ()
 	}
 
 	// the data link runs only on the two data screens (the Wi-Fi screens must not be disturbed)
+#ifdef NB_TOUCHDBG
+	{						// debug build: the raw touch report and the tracker state, written at the bottom of the screen (compile with -DNB_TOUCHDBG)
+		static uint32_t tD = 0;
+		if (millis () - tD > 80)
+		{
+			tD = millis ();
+			uint8_t d[6] = {0};
+			const uint8_t n = i2cRead (TP_ADDR, 0x01, d, 6);
+			char s[80];
+			snprintf (s, sizeof s, "rd%u c%u e%u x%d y%d | on%u off%u dn%d st%d   ", n, d[1] & 15, d[2] >> 6, ((d[2] & 15) << 8) | d[3], ((d[4] & 15) << 8) | d[5], g_trk.on, g_trk.off, (int) g_trk.down, (int) g_trk.settled);
+			tftHw.setTextColor (TFT_YELLOW, TFT_BLACK);
+			tftHw.drawString (s, 2, SH - 12, 1);
+			static int lastKey = -1;
+			static uint32_t tP = 0;
+			const int key = (d[1] & 15) * 1000 + (d[2] >> 6) * 100 + (int) g_trk.down * 10 + (int) g_trk.settled;
+			if (key != lastKey || ((d[1] & 15) && millis () - tP > 300)) { lastKey = key; tP = millis (); Serial.printf ("DBG %lu %s\n", (unsigned long) millis (), s); }
+		}
+	}
+#endif
 	const bool dataScreen = g_scr == SCR_STAGE || g_scr == SCR_PARAMS || g_scr == SCR_EDIT || g_scr == SCR_PRESETS;
 	static uint32_t tFx = 0;
 	int x, y;
@@ -2038,6 +2220,7 @@ void loop ()
 		draw ();
 		if (loadFx ()) g_msg = "";
 		else if (g_msg.indexOf ("stalled") < 0) g_msg = "no answer on the USB link";
+		tFx = millis ();			// the pause before the next attempt starts when this one ends: the touch gets at least these 3 seconds even when the board does not answer
 		g_dirty = true;
 	}
 	if (dataScreen && g_rx && g_fxOk && !finger && millis () - g_tStatus > (g_scr == SCR_STAGE ? 500 : 2000))

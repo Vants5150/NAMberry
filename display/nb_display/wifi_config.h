@@ -8,6 +8,8 @@
 // the name on the network: each board has its own, so that two displays can be on the same network
 #ifdef ARDUINO_ESP32S3_DEV
 #define OTA_HOSTNAME "nb-display"
+#elif defined(NB_NICE)
+#define OTA_HOSTNAME "nb-display-nice"
 #else
 #define OTA_HOSTNAME "nb-display-cyd"
 #endif
