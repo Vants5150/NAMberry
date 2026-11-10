@@ -42,6 +42,10 @@ The number of tiles and knobs per page follows the screen size (8 tiles per page
 
 *Knobs: the parameters of one block; choices and switches (Play, Signal, Mute) show their value in the centre of the arc, numbers show the number. The ON pill switches the block; the footer goes back to the Stage and to the previous or next block.*
 
+![The 4.0" display in its case in front of the NAMberry's case, showing the preset "Nice Crunch 1"](img/live_display_4in_with_namberry.jpg)
+
+*The 4.0" display in its case in front of the NAMberry's case, with the preset "Nice Crunch 1" on page 1 of 2 (the level bar at the left edge is the left output).*
+
 Not done from the display: drawing or removing arrows, moving blocks, deleting or renaming presets, **saving** the edited preset (parameter changes act on the sound at once but are stored only when you save from the web page; the preset name shows `*` while it holds unsaved changes), uploading models, MIDI settings, the service functions. A preset created with **+** is saved automatically, but only has one lane.
 
 ## Hardware
@@ -63,6 +67,10 @@ Freenove's own material for the two families: [Freenove_ESP32_S3_Display](https:
 | Firmware size | 1,146,848 bytes (36 % of the 3 MB application partition), 17 % of the RAM |
 
 The pins were taken from the board's design files and then confirmed with a bare-metal test sketch (`display/bringup/display_probe`): the first init sequence I tried (Adafruit values on the FSPI port) gave a black screen, the TFT_eSPI one on HSPI works.
+
+![The Stage screen of the preset "Test Spring" on the ESP32-S3 2.8" in a 3D-printed case](img/live_display_s3_stage.jpg)
+
+*Stage on the ESP32-S3 2.8" (landscape): the same preset ("Test Spring") as in the side-by-side photo in the NiceMCU section, with the same eight tiles.*
 
 ### ESP32 CYD, 4.0" (FNK0114S)
 
@@ -88,6 +96,22 @@ The chip's own factory flash was dumped before it was overwritten (4 MB, read ba
 | Touch | capacitive CST816D at I2C address 0x15, SDA 33, SCL 32, read by the sketch (the same I2C touch path as the S3). The I2C pins were read from the factory firmware's log |
 
 Tried by hand on the author's unit: the screen, the touch on the data link with the NAMberry (stage, knobs, Cfg) and all four rotations.
+
+![The Stage screen of the preset "Nice Clean" on the NiceMCU 2.8", in a 3D-printed case, USB cable on the right](img/live_display_nice_stage.jpg)
+
+*Stage on the NiceMCU 2.8" (landscape): the preset name with `<` `>`, eight tiles on page 1 of 2, Presets / Cfg below.*
+
+![The CYD 4.0" on its waiting screen above the NiceMCU 2.8" showing the preset "Test Spring"](img/live_display_nice_and_4in.jpg)
+
+*Both boards side by side. Top: the 4.0" on its waiting screen (firmware number and build time, its Wi-Fi address in the header, covered in the photo, "reading the effects..."), not connected to the NAMberry at that moment. Bottom: the NiceMCU 2.8" on the Stage screen of an unsaved preset (the asterisk after the name), 8 tiles, page 1 of 1.*
+
+![The NiceMCU 2.8" in its case, showing the preset "Nice Clean 2", in front of the NAMberry's 3D-printed case](img/live_display_nice_with_namberry.jpg)
+
+*The NiceMCU in its case (USB cable on the right) in front of the NAMberry's case, with the preset "Nice Clean 2" on page 1 of 2.*
+
+The bare board, front and back (the back is out of focus: the silkscreen reads NiceMCU-32S-DEV 2.0):
+
+<img src="img/nicemcu_board_front.jpg" alt="The front of the NiceMCU board: the 2.8 inch screen, switched off, held in a hand" width="300"> <img src="img/nicemcu_board_back.jpg" alt="The back of the NiceMCU board: the ESP32 module, the USB-C connector, the SD card slot and the connectors" width="300">
 
 ## How it is connected
 
