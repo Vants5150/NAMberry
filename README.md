@@ -194,6 +194,7 @@ The hardware specification (pins, screen, touch, what was found and what was not
 * Blokas Pisound (I2S audio, MIDI)
 * microSD card with Circle's boot files and Wi-Fi firmware (see "Not included")
 * A fan on the Pi 5 header is supported (PWM)
+* Raspberry Pi 4: **experimental and untested**, only on the `experimental-rpi4` branch, see [docs/rpi4-experimental.md](docs/rpi4-experimental.md)
 * Optional: the Live Display (Freenove ESP32-S3 2.8" or ESP32 CYD 4.0" touch display, one USB cable), see above
 
 <p align="center">

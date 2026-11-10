@@ -3516,6 +3516,10 @@ static unsigned s_nLliReports = 0;
 
 static void LliSnapshot (CLogger *pLogger, CPisoundSound *pSound)
 {
+#if RASPPI != 5
+	(void) pLogger; (void) pSound;
+	return;
+#else
 	for (int rx = 0; rx < 2; rx++)
 	{
 		for (unsigned n = 0; n < 2; n++)
@@ -3527,10 +3531,15 @@ static void LliSnapshot (CLogger *pLogger, CPisoundSound *pSound)
 		}
 	}
 	s_bLliSnap = TRUE;
+#endif
 }
 
 static boolean LliCheck (CLogger *pLogger, CPisoundSound *pSound, unsigned nTick)
 {
+#if RASPPI != 5
+	(void) pLogger; (void) pSound; (void) nTick;
+	return FALSE;
+#else
 	boolean bAnyDiff = FALSE;
 	if (!s_bLliSnap)
 	{
@@ -3559,6 +3568,7 @@ static boolean LliCheck (CLogger *pLogger, CPisoundSound *pSound, unsigned nTick
 		}
 	}
 	return bAnyDiff;
+#endif
 }
 
 // every 100 ms: changes coming from the page, models written via TFTP, saving, levels
@@ -4474,6 +4484,10 @@ void CKernel::ThermalInit (void)
 // PWM fan: GPIO 45 is the channel with index 3 (PWM_CHANNEL4 in Circle) of the RP1's PWM1 (alternate function 0), inverted polarity (duty 100 = always on, like Linux's pwm-fan driver)
 boolean CKernel::FanPwmStart (void)
 {
+#if RASPPI != 5
+	m_bFanPwmFailed = TRUE;
+	return FALSE;
+#endif
 	if (m_pFanPwm != 0)
 	{
 		return TRUE;
@@ -4509,7 +4523,9 @@ void CKernel::FanPwmSet (unsigned nPct)
 	{
 		nPct = 100;
 	}
+#if RASPPI == 5
 	m_pFanPwm->Write (PWM_CHANNEL4, nPct * FAN_PWM_RANGE / 100);		// Circle's channels start from 1: the RP1's PWM1_CHAN3 (index 3) is PWM_CHANNEL4
+#endif
 	m_Ctl.FanPct = nPct;
 	m_Ctl.CpuFan = nPct > 0 ? 1 : 0;
 }
@@ -4517,6 +4533,10 @@ void CKernel::FanPwmSet (unsigned nPct)
 // every 2 s: fan. Manual test (op fandt, expires by itself after FAN_PWM_TEST_SECONDS or at FAN_PWM_MAX_C degrees) or, if I control it, proportional curve with hysteresis
 void CKernel::FanTick (unsigned nTemp)
 {
+#if RASPPI != 5
+	(void) nTemp;
+	return;			// Pi 4: no PWM fan on GPIO 45 (RP1)
+#endif
 	const unsigned nNow = (unsigned) (CTimer::GetClockTicks () / 1000000);
 	if (m_Ctl.FanDutyNew)
 	{

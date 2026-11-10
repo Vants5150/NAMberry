@@ -5,7 +5,9 @@
 #include <circle/startup.h>
 #include <circle/actled.h>
 #include <circle/memio.h>
+#if RASPPI == 5
 #include <circle/bcm2712.h>
+#endif
 #include <circle/timer.h>
 
 // State of the RP1's DMA controller found at startup (it is written to the log by CKernel::Run)
@@ -19,6 +21,9 @@ unsigned g_nDmaResetOk = 0;
 // anything else (the complete reset is then done by Circle's driver when it creates the first channel).
 static void QuiesceRp1Dma (void)
 {
+#if RASPPI != 5
+	return;			// Pi 4: no RP1
+#else
 	const uintptr nBase = ARM_DMA_RP1_BASE;
 	g_nDmaChenAtBoot = read32 (nBase + 0x018);			// DMAC_CHEN
 	for (unsigned i = 0; i < 8; i++)
@@ -38,7 +43,16 @@ static void QuiesceRp1Dma (void)
 		}
 		CTimer::SimpleusDelay (1);
 	}
+#endif
 }
+
+#if RASPPI != 5
+// libgcc's outline atomics ask the OS (Linux auxv) whether the CPU has the LSE instructions: bare metal has no OS, so "none": the Cortex-A72 uses the LL/SC forms
+extern "C" unsigned long __getauxval (unsigned long)
+{
+	return 0;
+}
+#endif
 
 int main (void)
 {
