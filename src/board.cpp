@@ -238,6 +238,7 @@ static unsigned CostAt1500 (u8 nType)
 	case FxCe2:		return 27;		// Chorus CE-2 Real (fx_ce2.cpp): 0.27 us per sample and channel on the host (two linear circuits plus the delay line), same scale as the others; not measured on the board
 	case FxSecondHand:	return 14;		// two hands: delay taps, filters and the attack detector, estimated (not measured)
 	case FxOpticalLA:	return 12;		// 0.2 us per 4-sample mono block (0.4 stereo) on the Pi 5 (host test), same scale as the others (tsdrive 0.32 us = 8); not measured on the board
+	case FxSag:		return 4;		// ADELSag (fx_sag.cpp): about 0.15 us per 4-sample stereo block on the Pi 5 (host test, including the test signal), same scale as the others (tsdrive 0.32 us = 8); not measured on the board
 	default:		return 10;
 	}
 }

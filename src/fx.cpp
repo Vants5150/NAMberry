@@ -439,6 +439,8 @@ CFx *FxCreate (unsigned nType, float fRate)
 		return NewRatTS (fRate);
 	case FxOpticalLA:
 		return NewOpticalLA (fRate);
+	case FxSag:
+		return NewSag (fRate);
 	case FxDimD:
 		return NewDimD (fRate);
 	case FxMuff:

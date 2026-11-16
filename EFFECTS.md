@@ -356,6 +356,37 @@ BEHAVIOURAL model (not a circuit): 3-band detector, two-stage photocell with mem
 | Gain | -12 to 24 dB | Gain of the right channel (valid only with Link Off). |
 | Gain Reduction | 0 to 40 dB | Current gain reduction of the right channel. |
 
+### Sag (amplifier power supply)
+
+*Block name: ADELSag - Supply sag of a class AB amplifier.*
+
+Place it right after the NAM block. A load detector follows the level of the signal, the plate supply falls with the load and recovers, and a slower second stage (screen / preamp supply, a cascaded RC filter) follows it; the gain is `plate rail x sqrt(screen rail)`. At a quiet level the supply stays at its idle value and the block does not change the signal (bit-exact with Depth 0 and Ripple 0). The load is the rectified average of the larger of the two channels (one supply for the two channels).
+
+Basis: the rectifier and transformer resistance, the filter capacitors, class A against class AB and the 100/120 Hz ripple, from Aiken Amplification ("What is Sag?") and the Fender Deluxe 5E3 worked example on ampbooks.com (84 to 138 mA load, 360 to 328 V, plate supply falling at about 0.8% per ms). The five Supply presets are real situations whose parameters are derived from published numbers (table below, with what is sourced, derived or assumed); they are not measurements made on an amplifier. Not modelled: the extra distortion of a lower rail (the NAM contains the clipping of the nominal rail) and the current law of the rectifier tube (a linear source resistance is used).
+
+| Control | Range | What it does |
+|---|---|---|
+| Supply | choice | One of the five presets below, or Custom (the three knobs below). |
+| Depth | 0 to 30 % | Custom only: gain drop at full power when the rail has settled. |
+| Attack | 2 to 50 ms | Custom only: how fast the plate rail falls when the load rises. |
+| Recovery | 10 to 300 ms | Custom only: how fast the plate rail comes back; the screen stage is three times longer. |
+| Full power at | -30 to 0 dB | Peak level (dBFS, sine) at which the amplifier is at full power. |
+| Power stage | choice | Class AB sags; class A (almost no sag: the load swing is 8% of class AB). |
+| Ripple | 0 to 3 % | Modulation of the signal by the supply ripple, 30% of this value at idle and the full value at full power. |
+| Mains | choice | 50 or 60 Hz: the ripple is at 100 or 120 Hz. |
+
+Supply presets (Depth = gain drop at full power, Attack = Recovery = plate time constant, Slow = time of the screen / preamp stage):
+
+| Preset | Depth | Attack = Recovery | Slow | Basis |
+|---|---|---|---|---|
+| Fender 5E3 Deluxe, 5Y3 rectifier | 13.0% | 9.5 ms | 80 ms | Sourced (ampbooks.com worked example): 360 V to 328 V for a load of 84 to 138 mA, source resistance 593 ohm, 16 uF. The slow stage is a 5 kohm filter resistor with 16 uF ASSUMED. |
+| Fender 5E3, silicon diodes | 1.7% | 1.3 ms | 80 ms | Derived from the transformer data of the same example (56 ohm per phase + reflected primary = 84 ohm), a lower bound. |
+| Fender 5E3, diodes + 100 ohm | 3.8% | 2.9 ms | 80 ms | Derived: the usual 100 ohm tube-rectifier emulation (Aiken, GroupDIY) on top of the previous one. |
+| Marshall 100 W Super Lead 1967-68 | 26.4% | 25 ms | 580 ms | Sourced: 460 V plates that drop 80-90 V at full distortion, 50 uF mains capacitor, 8.2 kohm + 10 kohm with 32 uF to the phase inverter. The plate time (500 ohm x 50 uF) rests on an ASSUMED source resistance. |
+| Vox AC30, GZ34 (estimated) | 5.8% | 8 ms | 60 ms | Partly sourced: B+ 320 V, current swing of about 50 mA. Source resistance (250 ohm), capacitor (32 uF) and slow time are ASSUMED. |
+| Rail | 0 to 100 % | Plate supply as a percentage of its idle value (read-only). |
+| Gain Reduction | 0 to 12 dB | Gain applied by the block (read-only). |
+
 ### Tone Stack (Fender / Marshall)
 
 *Block name: ADELToneStackReal - Passive tone network.*

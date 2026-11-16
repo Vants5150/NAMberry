@@ -57,8 +57,10 @@ enum TFxType
 	FxSecondHand = 85,
 	// ADELshifter Manual: harmonizer whose three voices remember their semitones for every note (fx_shifter.cpp)
 	FxShifterManual = 86,
+	// ADELSag: power-supply sag of an amplifier, placed after the NAM block (fx_sag.cpp)
+	FxSag = 87,
 	FxFirst = 5,
-	FxLast = 86
+	FxLast = 87
 };
 
 enum TFxKind
@@ -206,6 +208,20 @@ inline const TFxParam g_XLa[] = {XK("pr", "Peak Reduction", "", 0.0f, 100.0f, 0.
 	{"gain2", "Gain", "dB", -12.0f, 24.0f, 0.5f, 0.0f, 0, 0, 1, 0, 0, "Gain of the right channel (valid only with Link Off)."},
 	{"gr2", "Gain Reduction", "dB", 0.0f, 40.0f, 0.1f, 0.0f, 3, 0, 1, 0, 0, "Current gain reduction of the right channel."}};
 inline const char *const g_XLaGroups[] = {"Main (left)", "Right channel (Link Off)"};
+inline const char *const g_XSagSupply[] = {"Fender 5E3 Deluxe, 5Y3 rectifier", "Fender 5E3, silicon diodes", "Fender 5E3, diodes + 100 ohm", "Marshall 100 W Super Lead 1967-68", "Vox AC30, GZ34 (estimated)", "Custom (Depth, Attack, Recovery)"};
+inline const char *const g_XSagClass[] = {"Class AB (sags)", "Class A (almost no sag)"};
+inline const char *const g_XSagMains[] = {"50 Hz (ripple 100 Hz)", "60 Hz (ripple 120 Hz)"};
+inline const TFxParam g_XSag[] = {
+	XC("supply", "Supply", 5.0f, 0.0f, g_XSagSupply, "Power supply of a real amplifier: each preset sets Depth, Attack, Recovery and the time of the slow stage from published numbers (see EFFECTS.md: the 5E3 with the 5Y3 and the Marshall 100 W are sourced, the diode variants are derived, the Vox AC30 is estimated). Custom uses the three knobs below."),
+	XK("depth", "Depth", "%", 0.0f, 30.0f, 0.5f, 10.0f, "Custom only: gain drop at full power when the rail has settled. At 0 (and Ripple 0) the block does not change the signal."),
+	XK("attack", "Attack", "ms", 2.0f, 50.0f, 0.5f, 8.0f, "Custom only: how fast the rail falls when the load rises (plate supply)."),
+	XK("recovery", "Recovery", "ms", 10.0f, 300.0f, 1.0f, 40.0f, "Custom only: how fast the plate rail comes back when the load goes away; the slower screen/preamp stage that follows is three times longer."),
+	XK("level", "Full power at", "dB", -30.0f, 0.0f, 0.5f, -9.0f, "Level (peak of a sine, dBFS) at which the amplifier is at full power: it sets how much load a given playing level puts on the supply. Calibrate by ear; with the block right after the NAM it is a level at the NAM output."),
+	XC("class", "Power stage", 1.0f, 0.0f, g_XSagClass, "Class AB amplifiers draw more current as the output grows and sag; a class A stage draws about the same current at idle and at full power, so it hardly sags."),
+	XK("ripple", "Ripple", "%", 0.0f, 3.0f, 0.05f, 0.3f, "Modulation of the signal by the rectified-mains ripple of the supply (it grows with the load, 30% of this value at idle). 0 = filtered perfectly."),
+	XC("mains", "Mains", 1.0f, 0.0f, g_XSagMains, "Mains frequency: the ripple is at twice this value (full-wave rectification)."),
+	{"rail", "Rail", "%", 0.0f, 100.0f, 0.1f, 100.0f, 3, 0, 0, 0, 0, "Plate supply as a percentage of its idle value (read-only)."},
+	{"gr", "Gain Reduction", "dB", 0.0f, 12.0f, 0.01f, 0.0f, 3, 0, 0, 0, 0, "Gain applied by the block, as a reduction (read-only)."}};
 inline const TFxParam g_XTs[] = {XK("drive", "Drive", "%", 0.0f, 100.0f, 1.0f, 40.0f, "How hard the clipping is pushed, with the mid hump typical of the Tube Screamer."), XK("tone", "Tone", "%", 0.0f, 100.0f, 1.0f, 50.0f, "Low-pass: 0 = dark, 100 = bright."), XK("level", "Level", "dB", -24.0f, 12.0f, 0.5f, 0.0f, "Output level.")};
 inline const char *const g_XMuffVer[] = {"V3 Ram's Head (1976)", "V2 Ram's Head (1974)", "V1 Triangle (1972)", "EH old model (Oct 1975)", "Little Big Muff"};
 inline const TFxParam g_XMuff[] = {XK("sustain", "Sustain", "", 0.0f, 10.0f, 0.1f, 5.0f, "Like the pedal's knob (100k linear potentiometer): how much signal enters the two clipping stages, that is gain and sustain."),
@@ -450,6 +466,7 @@ inline const TFxDef g_FxDefs[] =
 	XDEFN (FxTubeScreamer, "tubescreamer", "ADELScreamerTS", g_XTube),
 	XDEFN (FxRatTS, "ratts", "ADELRatReal", g_XRatTS),
 	{FxOpticalLA, "opticalla", "ADELOpticalLAReal", sizeof g_XLa / sizeof g_XLa[0], g_XLa, 2, g_XLaGroups, 0},
+	XDEFN (FxSag, "sag", "ADELSag", g_XSag),
 	XDEFN (FxCe2, "ce2", "ADELChorusCE2Real", g_XCe2),
 	XDEFN (FxAd9, "ad9", "ADELAnalogDelayAD9Real", g_XAd9),
 	XDEFN (FxMicroFlanger, "mflanger", "ADELFlangerMicroReal", g_XMflanger)

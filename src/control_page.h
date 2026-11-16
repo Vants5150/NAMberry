@@ -438,7 +438,7 @@ const addOpts=depth=>[["nam","NAM"],["vol","Volume"],["rout","Routing (routing o
 function fxSortKey(t){return String(t).replace(/^ToTest - /,"").replace(/^ADEL\s*/i,"")}
 const fxMixIdx=n=>{const d=fxd(n.fx);return d?d.p.findIndex(p=>p.k=="mix"):-1};
 /* ToTest effects (fx_extra.cpp): they keep a mono input mono, except these four, which make the output stereo*/
-const XFX=["tsdrive","muff","fuzzface","tremolo","harmtrem","autowah","octaver","noisegate","univibe","flanger","rotary","tapeecho","booster","tonestack","swell","widener","vibrato","centaur","bluesdrv","ds1","ocd","guvnor","rangemaster","fz1","bender","fuzzfactory","phase90","smallstone","ce1","ce2","ad9","mflanger","dimension","autopan","slicer","crybaby","womantone","geq6","dynacomp","optocomp","limiter","analogdelay","duckdelay","sustainer","selector","tubescreamer","ratts","opticalla"];
+const XFX=["tsdrive","muff","fuzzface","tremolo","harmtrem","autowah","octaver","noisegate","univibe","flanger","rotary","tapeecho","booster","tonestack","swell","widener","vibrato","centaur","bluesdrv","ds1","ocd","guvnor","rangemaster","fz1","bender","fuzzfactory","phase90","smallstone","ce1","ce2","ad9","mflanger","dimension","autopan","slicer","crybaby","womantone","geq6","dynacomp","optocomp","limiter","analogdelay","duckdelay","sustainer","selector","tubescreamer","ratts","opticalla","sag"];
 const fxStereoOut=n=>["adelverb","adeldelay","adelspring","adelchorus","adelshifter","shiftermanual","secondhand","rotary","widener","dimension","autopan"].includes(n.fx);
 const GL={
   io_in:'<svg viewBox="0 0 24 24"><path d="M3 12h13M12 7l5 5-5 5M20 5v14"/></svg>',
@@ -464,7 +464,7 @@ GL.adeldelaym=GL.delay;GL.adelverbm=GL.reverb;
 GL.tsdrive=GL.muff=GL.fuzzface=GL.booster='<svg viewBox="0 0 24 24"><path d="M3 18l4-12h4v12h4V6h4l2 12"/></svg>';
 GL.tremolo=GL.harmtrem=GL.univibe=GL.flanger=GL.vibrato=GL.rotary=GL.adelchorus;
 GL.tapeecho=GL.delay;GL.noisegate=GL.swell=GL.compressor;GL.autowah=GL.tonestack=GL.adelequal;GL.octaver=GL.adelshifter;GL.widener=GL.pan;
-GL.centaur=GL.bluesdrv=GL.ds1=GL.ocd=GL.guvnor=GL.rangemaster=GL.fz1=GL.bender=GL.fuzzfactory=GL.tubescreamer=GL.ratts=GL.tsdrive;GL.opticalla=GL.compressor;
+GL.centaur=GL.bluesdrv=GL.ds1=GL.ocd=GL.guvnor=GL.rangemaster=GL.fz1=GL.bender=GL.fuzzfactory=GL.tubescreamer=GL.ratts=GL.tsdrive;GL.opticalla=GL.compressor;GL.sag='<svg viewBox="0 0 24 24"><path d="M3 7h5l3 9h2l3-9h5"/></svg>';
 GL.phase90=GL.smallstone=GL.phaser;GL.ce1=GL.ce2=GL.dimension=GL.vibrato;GL.autopan=GL.slicer=GL.widener;GL.crybaby=GL.womantone=GL.geq6=GL.adelequal;
 GL.dynacomp=GL.limiter=GL.sustainer=GL.compressor;GL.analogdelay=GL.duckdelay=GL.ad9=GL.delay;GL.mflanger=GL.flanger;
 GL.selector=GL.rout;
