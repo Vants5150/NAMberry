@@ -46,5 +46,7 @@ inline adelverb::Params paramsFromControls(const float* v) {
     q.freeze = v[P_FREEZE];
     q.morph = v[P_MORPH] * 0.01f;
     q.morphTarget = int(v[P_MORPHTARGET] + 0.5f);
+    q.shimmer = v[P_SHIMMER] * 0.01f;
+    q.shimmerSemi = v[P_SHIMMERPITCH];
     return q;
 }

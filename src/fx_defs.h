@@ -59,8 +59,10 @@ enum TFxType
 	FxShifterManual = 86,
 	// ADELSag: power-supply sag of an amplifier, placed after the NAM block (fx_sag.cpp)
 	FxSag = 87,
+	// ADELNoise: hiss (before the NAM) and mains hum (after it) (fx_noise.cpp)
+	FxNoise = 88,
 	FxFirst = 5,
-	FxLast = 87
+	FxLast = 88
 };
 
 enum TFxKind
@@ -211,6 +213,17 @@ inline const char *const g_XLaGroups[] = {"Main (left)", "Right channel (Link Of
 inline const char *const g_XSagSupply[] = {"Fender 5E3 Deluxe, 5Y3 rectifier", "Fender 5E3, silicon diodes", "Fender 5E3, diodes + 100 ohm", "Marshall 100 W Super Lead 1967-68", "Vox AC30, GZ34 (estimated)", "Custom (Depth, Attack, Recovery)"};
 inline const char *const g_XSagClass[] = {"Class AB (sags)", "Class A (almost no sag)"};
 inline const char *const g_XSagMains[] = {"50 Hz (ripple 100 Hz)", "60 Hz (ripple 120 Hz)"};
+inline const char *const g_XNoiseHum[] = {"Supply ripple (2x mains)", "Heater / induction (1x mains)", "Ground-loop buzz (1x mains, many harmonics)"};
+inline const char *const g_XNoiseMains[] = {"50 Hz", "60 Hz"};
+inline const TFxParam g_XNoise[] = {
+	XK("hiss", "Hiss", "dB", -130.0f, -30.0f, 0.5f, -127.5f, "Level (rms, dBFS, before the two filters below) of the hiss; the minimum switches it off. Put the block BEFORE the NAM: it is the input noise of the amplifier and the NAM amplifies it. Default: 1.8 uV of a 12AX7 first stage (Svetlana datasheet) = -112.7 dBu, that is -127.7 dBFS for a model with +15 dBu at 0 dBFS (dBFS = dBu - the model's input level)."),
+	XK("color", "Hiss color", "%", 0.0f, 100.0f, 1.0f, 50.0f, "0 = white noise, 100 = pink noise (-3 dB per octave, like the 1/f part of tube noise)."),
+	XKL("bw", "Hiss bandwidth", "kHz", 1.0f, 20.0f, 0.1f, 12.0f, "Low-pass of the hiss (two poles): the amplifier's tone controls and the speaker take the highs of the real hiss away."),
+	XKL("lowcut", "Hiss low cut", "Hz", 20.0f, 400.0f, 1.0f, 20.0f, "High-pass of the hiss (one pole)."),
+	XK("hum", "Hum", "dB", -120.0f, -30.0f, 0.5f, -120.0f, "Level (rms, dBFS) of the hum; the minimum switches it off. Put the block AFTER the NAM: hum comes from the supply and the heaters, not from the input."),
+	XC("humtype", "Hum type", 2.0f, 0.0f, g_XNoiseHum, "Supply ripple: twice the mains frequency with a sawtooth-like series of harmonics. Heater / induction: the mains frequency with a few weaker harmonics. Ground-loop buzz: the mains frequency with twenty harmonics (harsh). The harmonic amplitudes are chosen, not measured."),
+	XC("mains", "Mains", 1.0f, 0.0f, g_XNoiseMains, "Mains frequency."),
+	{"noise", "Noise level", "dB", -140.0f, 0.0f, 0.1f, -140.0f, 3, 0, 0, 0, 0, "rms of the noise really added (hiss and hum, 0.2 s average), read-only."}};
 inline const TFxParam g_XSag[] = {
 	XC("supply", "Supply", 5.0f, 0.0f, g_XSagSupply, "Power supply of a real amplifier: each preset sets Depth, Attack, Recovery and the time of the slow stage from published numbers (see EFFECTS.md: the 5E3 with the 5Y3 and the Marshall 100 W are sourced, the diode variants are derived, the Vox AC30 is estimated). Custom uses the three knobs below."),
 	XK("depth", "Depth", "%", 0.0f, 30.0f, 0.5f, 10.0f, "Custom only: gain drop at full power when the rail has settled. At 0 (and Ripple 0) the block does not change the signal."),
@@ -467,6 +480,7 @@ inline const TFxDef g_FxDefs[] =
 	XDEFN (FxRatTS, "ratts", "ADELRatReal", g_XRatTS),
 	{FxOpticalLA, "opticalla", "ADELOpticalLAReal", sizeof g_XLa / sizeof g_XLa[0], g_XLa, 2, g_XLaGroups, 0},
 	XDEFN (FxSag, "sag", "ADELSag", g_XSag),
+	XDEFN (FxNoise, "noise", "ADELNoise", g_XNoise),
 	XDEFN (FxCe2, "ce2", "ADELChorusCE2Real", g_XCe2),
 	XDEFN (FxAd9, "ad9", "ADELAnalogDelayAD9Real", g_XAd9),
 	XDEFN (FxMicroFlanger, "mflanger", "ADELFlangerMicroReal", g_XMflanger)

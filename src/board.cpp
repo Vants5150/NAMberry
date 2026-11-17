@@ -239,6 +239,7 @@ static unsigned CostAt1500 (u8 nType)
 	case FxSecondHand:	return 14;		// two hands: delay taps, filters and the attack detector, estimated (not measured)
 	case FxOpticalLA:	return 12;		// 0.2 us per 4-sample mono block (0.4 stereo) on the Pi 5 (host test), same scale as the others (tsdrive 0.32 us = 8); not measured on the board
 	case FxSag:		return 4;		// ADELSag (fx_sag.cpp): about 0.15 us per 4-sample stereo block on the Pi 5 (host test, including the test signal), same scale as the others (tsdrive 0.32 us = 8); not measured on the board
+	case FxNoise:		return 8;		// ADELNoise (fx_noise.cpp): 0.08 us (hiss) to 0.30 us (hiss + 20-harmonic buzz) per 4-sample stereo block on the Pi 5 (host test), same scale as the others (tsdrive 0.32 us = 8), worst case; not measured on the board
 	default:		return 10;
 	}
 }
@@ -349,6 +350,19 @@ int CBoard::MidiFindClass (unsigned nClass) const
 	return nBest;
 }
 
+// bypass behaviour that the block really uses: only NAM and effects (not the Selector) have one, the others are Thru
+static u8 EffByp (const TBdBlock &Bl)
+{
+	const boolean bEligible = Bl.Type == NodeNam || (Bl.Type >= FxFirst && Bl.Type <= FxLast && Bl.Type != FxSelector);
+	return bEligible && Bl.Byp < BYP_COUNT ? Bl.Byp : (u8) BYP_THRU;
+}
+
+// true if a block that is off still runs (it costs processor time): all the modes but Thru and Mute Out
+static boolean ByRunsOff (u8 nByp)
+{
+	return nByp == BYP_MUTE_FX_IN || nByp == BYP_MUTE_FX_OUT || nByp == BYP_MUTE_IN;
+}
+
 unsigned CBoard::MidiClassMask (void) const
 {
 	unsigned nMask = 0;
@@ -437,6 +451,7 @@ unsigned CBoard::EstimateLoad10 (void) const
 			{
 				Tmp.Node[i].Kind = m_Block[i].Type;
 				Tmp.Node[i].On = m_Block[i].On ? 1 : 0;
+				Tmp.Node[i].Byp = EffByp (m_Block[i]);
 			}
 		}
 		NetBuild (&Tmp);
@@ -445,7 +460,7 @@ unsigned CBoard::EstimateLoad10 (void) const
 	unsigned n = 7;
 	for (unsigned i = 0; i < BD_MAX_BLOCKS; i++)
 	{
-		if (m_Block[i].Used && m_Block[i].On)
+		if (m_Block[i].Used && (m_Block[i].On || ByRunsOff (EffByp (m_Block[i]))))
 		{
 			n += NodeCost10 (m_Block[i].Type);
 		}
@@ -504,6 +519,15 @@ const char *CBoard::SetValue (int nId, const char *pKey, float fValue)
 			return BD_LOAD_MSG;
 		}
 		Bl.On = fValue > 0.5f;
+	}
+	else if (strcmp (pKey, "byp") == 0)
+	{
+		const int nByp = (int) (fValue + 0.5f);
+		if (nByp < 0 || nByp >= BYP_COUNT)
+		{
+			return "bypass behaviour out of range";
+		}
+		Bl.Byp = (u8) nByp;
 	}
 	else if (Bl.Type == NodeNam && strcmp (pKey, "in") == 0)
 	{
@@ -626,6 +650,7 @@ void CBoard::Compile (TPlan *pPlan, adelnam::Instance *const *ppInst, float fMas
 		}
 		N.Kind = Bl.Type;
 		N.On = Bl.On ? 1 : 0;
+		N.Byp = EffByp (Bl);
 if (Bl.Type == NodeNam)
 		{
 			N.pInst = (Bl.Loaded && Bl.Slot >= 0) ? ppInst[Bl.Slot] : 0;
@@ -971,9 +996,11 @@ const char *CBoard::NetRetype (int nId, const char *pType, const char *pDefaultF
 	}
 	const int nA = Bl.A, nB = Bl.B;
 	const boolean bOn = Bl.On;
+	const u8 nByp = Bl.Byp;
 	memset (&Bl, 0, sizeof Bl);
 	Bl.Used = TRUE;
 	Bl.On = bOn;
+	Bl.Byp = nByp;
 	Bl.A = nA;
 	Bl.B = nB;
 	Bl.Slot = -1;
@@ -1367,8 +1394,9 @@ static unsigned McSchedule (TPlan *pPlan, unsigned nCores)
 			continue;
 		}
 		const TPNode &N = pPlan->Node[id];
-		const unsigned nCost = N.On ? CBoard::NodeCost10 (N.Kind) : 0;
-		const boolean bOff = N.On && McOffloadable (N.Kind);
+		const boolean bRuns = N.On || ByRunsOff (N.Byp);		// a bypassed block that keeps running costs as much as an active one
+		const unsigned nCost = bRuns ? CBoard::NodeCost10 (N.Kind) : 0;
+		const boolean bOff = bRuns && McOffloadable (N.Kind);
 		unsigned nReady = 0;
 		for (int q = pPlan->LFirst[id]; q < pPlan->LFirst[id + 1] && q < PL_MAX_LINKS; q++)
 		{
@@ -1720,7 +1748,7 @@ unsigned CBoard::Serialize (char *pBuffer, unsigned nSize) const
 		pBuffer[n++] = 'd';
 		pBuffer[n++] = ' ';
 		n += PutInt (pBuffer + n, (int) i);
-		const int v[9] = {Bl.Type, Bl.On ? 1 : 0, -1, Bl.A, Bl.B, -1, -1, 0, Bl.Slot};		// next, c, par and lane no longer exist: they stay in the file format
+		const int v[9] = {Bl.Type, Bl.On ? 1 : 0, -1, Bl.A, Bl.B, -1, -1, (int) Bl.Byp, Bl.Slot};		// next, c and par no longer exist: they stay in the file format; the old "lane" field now holds the bypass behaviour (old files have 0 = Thru)
 		for (unsigned k = 0; k < 9; k++)
 		{
 			pBuffer[n++] = ' ';
@@ -2149,6 +2177,7 @@ boolean CBoard::Parse (const char *pText)
 			Bl.Used = TRUE;
 			Bl.Type = (u8) v[0];
 			Bl.On = v[1] != 0;
+			Bl.Byp = (u8) ((nInts == 9 && v[7] > 0 && v[7] < BYP_COUNT) ? v[7] : BYP_THRU);		// format 'd': the old "lane" field holds the bypass behaviour
 			Bl.A = v[3];
 			Bl.B = v[4];
 			Bl.Slot = nSlot;

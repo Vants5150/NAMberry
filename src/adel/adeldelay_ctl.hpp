@@ -32,6 +32,8 @@ enum Ctl {
     C_DUCK,
     C_DUCKREL,
     C_HOLD,
+    C_PITCH,
+    C_PITCHMIX,
     C_COUNT
 };
 
@@ -67,6 +69,8 @@ static const float kDefaults[C_COUNT] = {
     0.0f,
     300.0f,
     0.0f,
+    0.0f,
+    0.0f,
 };
 
 static const char* const kSymbols[C_COUNT] = {
@@ -101,9 +105,13 @@ static const char* const kSymbols[C_COUNT] = {
     "duck",
     "duckrel",
     "hold",
+    "pitch",
+    "pitchmix",
 };
 
 static const bool kIsOutput[C_COUNT] = {
+    false,
+    false,
     false,
     false,
     false,

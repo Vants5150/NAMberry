@@ -40,6 +40,8 @@ struct Params {
     float duck = 0.f;           // 0..1
     float duckRelMs = 300.f;
     float hold = 0.f;           // 0 o 1
+    float pitchSemi = 0.f;      // -12..12 semitones: transposition of the repeats (each repeat steps again)
+    float pitchMix = 0.f;       // 0..1: amount of transposed signal in the repeats (0 = off, identical to the old behaviour)
     bool wetOnly = false;       // output = repeats only (no dry signal)
 };
 
@@ -61,6 +63,7 @@ public:
             for (int k = 0; k < 4; ++k) {
                 ch_[c].ap[k].assign(std::max(8, int(std::lround((apl[k] + 17 * c) * scale_))), 0.f);
             }
+            ch_[c].ps.init(fs_);
         }
         clear();
     }
@@ -75,6 +78,7 @@ public:
             }
             h.w = 0;
             h.os.clear();
+            h.ps.clear();
             h.rvPh = 0.f;
             h.hp1 = h.hp2 = h.fl1 = h.fl2 = h.tl1 = h.tl2 = h.bump = 0.f;
             h.b1 = h.b2 = h.b3 = h.b4 = 0.f;
@@ -82,6 +86,7 @@ public:
         }
         rng_ = 0x9E3779B9u;
         env_ = 0.f;
+        pmS_ = psAct_ = 0.f;
         lfoMod_ = lfoWow_ = lfoFlu_ = trem_ = 0.f;
         first_ = true;
     }
@@ -101,15 +106,15 @@ public:
         const float tT = clampf(p.timeMs * ratio, 10.f, 3000.f) * 1e-3f * fs;
         if (first_) {
             tCur_ = tT;
-            mix_ = p.wetOnly ? 1.f : clampf(p.mix, 0.f, 1.f);
+            mix_ = clampf(p.mix, 0.f, 1.f);
             dryS_ = p.wetOnly ? 0.f : 1.f;
             pp_ = clampf(p.pingpong, 0.f, 1.f);
             holdS_ = p.hold > 0.5f ? 1.f : 0.f;
             first_ = false;
         }
         const float glideC = 1.f - std::exp(-1.f / (std::max(10.f, p.glideMs) * 1e-3f * fs));
-        // Wet Only: the dry comes out of the output and the repeats go to full level (Mix does not count; adjust with Level)
-        const float mixT = p.wetOnly ? 1.f : clampf(p.mix, 0.f, 1.f);
+        // Wet Only: the dry comes out of the output; Mix still sets the level of the repeats
+        const float mixT = clampf(p.mix, 0.f, 1.f);
         const float dryT = p.wetOnly ? 0.f : 1.f;
         const float levG = std::pow(10.f, clampf(p.levelDb, -48.f, 24.f) / 20.f);
         const float fbT = clampf(p.feedback, 0.f, 1.1f);
@@ -151,12 +156,20 @@ public:
         const float duckT = clampf(p.duck, 0.f, 1.f);
         const float relC = std::exp(-1.f / (std::max(20.f, p.duckRelMs) * 1e-3f * fs));
         const float sm = 0.002f;
+        // transposed repeats: the shifter sits in the feedback path (the dry never goes through it). Its average delay is
+        // taken off the read time, so the repeats stay on the tempo.
+        const float pmT = clampf(p.pitchMix, 0.f, 1.f);
+        const bool psWant = pmT > 0.002f;
+        const float psRatio = std::pow(2.f, clampf(p.pitchSemi, -24.f, 24.f) / 12.f);
+        const float psHalf = ch_[0].ps.grainDelay();
 
         for (uint32_t t = 0; t < n; ++t) {
             mix_ += sm * (mixT - mix_);
             dryS_ += sm * (dryT - dryS_);
             pp_ += sm * (ppT - pp_);
             holdS_ += 0.0008f * (holdT - holdS_);
+            pmS_ += sm * (pmT - pmS_);
+            psAct_ += 0.0003f * ((psWant ? 1.f : 0.f) - psAct_);
             rev_ += sm * (revT - rev_);
             tCur_ += glideC * (tT - tCur_);
             const float x = in[t];
@@ -186,8 +199,9 @@ public:
             // dL/dR: "true" time of the line; the echo path compensates the oversampling latency in the read
             const float dL = std::max(40.f, tL + modS[0]), dR = std::max(40.f, tR + modS[1]);
             const float kOs = float(dspkit::Os4::LATENCY);
-            float yL = dspkit::readLagrange8(ch_[0].buf.data(), ch_[0].mask, ch_[0].w, dL - kOs);
-            float yR = dspkit::readLagrange8(ch_[1].buf.data(), ch_[1].mask, ch_[1].w, dR - kOs);
+            const float cmpL = psAct_ * std::min(psHalf, 0.5f * tL), cmpR = psAct_ * std::min(psHalf, 0.5f * tR);
+            float yL = dspkit::readLagrange8(ch_[0].buf.data(), ch_[0].mask, ch_[0].w, std::max(8.f, dL - kOs - cmpL));
+            float yR = dspkit::readLagrange8(ch_[1].buf.data(), ch_[1].mask, ch_[1].w, std::max(8.f, dR - kOs - cmpR));
             // extra heads (from both lines)
             float tapA = 0.f, tapB = 0.f;
             if (lv2 > 0.002f)
@@ -199,6 +213,14 @@ public:
             // coloration and feedback
             float cL = colour(ch_[0], yL, b, holdS_);
             float cR = colour(ch_[1], yR, b, holdS_);
+            // transposition of the repeats (not in hold: it would climb for ever without the feedback filters)
+            ch_[0].ps.push(cL);
+            ch_[1].ps.push(cR);
+            if (psAct_ > 0.002f || pmS_ > 0.002f) {
+                const float pw = pmS_ * (1.f - holdS_);
+                cL = (1.f - pw) * ch_[0].ps.delayed() + pw * ch_[0].ps.shifted(psRatio);
+                cR = (1.f - pw) * ch_[1].ps.delayed() + pw * ch_[1].ps.shifted(psRatio);
+            }
             // reverse (on the lines, before the coloration)
             float eL = cL, eR = cR;
             if (rev_ > 0.002f) {
@@ -250,6 +272,7 @@ private:
         int apI[4] = {};
         float rvPh = 0, rwWow = 0, rwFlu = 0, rwWow2 = 0, rwFlu2 = 0;
         dspkit::Os4 os;
+        dspkit::PitchShift2 ps;
     };
 
     struct Blk {
@@ -343,7 +366,7 @@ private:
     float scale_ = 1.f;
     Chan ch_[2];
     float dryS_ = 1.f;
-    float mix_ = 0, pp_ = 0, holdS_ = 0, rev_ = 0, tCur_ = 0, env_ = 0, trem_ = 0;
+    float mix_ = 0, pp_ = 0, holdS_ = 0, rev_ = 0, tCur_ = 0, env_ = 0, trem_ = 0, pmS_ = 0, psAct_ = 0;
     float lfoMod_ = 0, lfoWow_ = 0, lfoFlu_ = 0;
     uint32_t rng_ = 1;
     bool first_ = true;

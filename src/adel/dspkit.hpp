@@ -1,6 +1,7 @@
 // DSP tools shared by the ADEL plugins: 4x linear-phase oversampling, 8-point Lagrange interpolation,
 // first-order "ADAA" anti-aliasing (Parker, Zavalishin, Le Bivic 2016) for latency-free saturators.
 #pragma once
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <vector>
@@ -142,6 +143,67 @@ struct AdaaRational {
         return float(y);
     }
     void reset() { init = false; xprev = 0.0; }
+};
+
+
+// ---- two-head pitch shifter (delay-line shifter, no pitch detection: works on chords). Two reading heads on a circular buffer,
+// shifted by half a grain and weighted with Hann windows that add up to 1. The delay of each head slides at (1 - ratio) samples
+// per sample, so the playback speed is "ratio" (2 = one octave up, 0.5 = one octave down). Average delay of the shifted
+// signal = grainDelay() samples: use it only inside feedback loops, or compensate it. Ripple (warble) on sustained notes. ----
+class PitchShift2 {
+public:
+    void init(double fs, float grainMs = 40.f) {
+        wd_ = std::max(128.f, grainMs * 1e-3f * float(fs));
+        uint32_t need = uint32_t(wd_) + 16, sz = 1;
+        while (sz < need) sz <<= 1;
+        buf_.assign(sz, 0.f);
+        mask_ = sz - 1;
+        for (int i = 0; i <= WT; ++i) win_[i] = 0.5f - 0.5f * float(std::cos(2.0 * M_PI * double(i) / WT));
+        clear();
+    }
+    void clear() {
+        std::fill(buf_.begin(), buf_.end(), 0.f);
+        w_ = 0;
+        ph_ = 0.f;
+    }
+    // average delay of the shifted (and of the delayed(), equal-latency) signal, in samples
+    float grainDelay() const { return 0.5f * wd_ + 4.f; }
+    // write one input sample (always call it, once per sample)
+    inline void push(float x) { buf_[w_ & mask_] = x; ++w_; }
+    // shifted output for the last pushed sample; advances the heads
+    inline float shifted(float ratio) {
+        ph_ += (1.f - ratio) / wd_;
+        ph_ -= std::floor(ph_);
+        float p2 = ph_ + 0.5f;
+        p2 -= std::floor(p2);
+        return win(ph_) * rc(ph_ * wd_ + 4.f) + win(p2) * rc(p2 * wd_ + 4.f);
+    }
+    // the same input with the same average delay and no shift (to blend with shifted() without comb filtering)
+    inline float delayed() const { return rc(0.5f * wd_ + 4.f); }
+
+private:
+    static constexpr int WT = 1024;
+    inline float win(float ph) const {
+        float x = ph * float(WT);
+        int i = int(x);
+        float f = x - float(i);
+        return win_[i] + f * (win_[i + 1] - win_[i]);
+    }
+    inline float rc(float dly) const {
+        float dfl = std::floor(dly);
+        float f = 1.f - (dly - dfl);
+        uint32_t i = w_ - uint32_t(int32_t(dfl)) - 1u;
+        const float* b = buf_.data();
+        float y0 = b[(i - 1) & mask_], y1 = b[i & mask_], y2 = b[(i + 1) & mask_], y3 = b[(i + 2) & mask_];
+        float c1 = 0.5f * (y2 - y0);
+        float c2 = y0 - 2.5f * y1 + 2.f * y2 - 0.5f * y3;
+        float c3 = 0.5f * (y3 - y0) + 1.5f * (y1 - y2);
+        return ((c3 * f + c2) * f + c1) * f + y1;
+    }
+    std::vector<float> buf_;
+    uint32_t mask_ = 0, w_ = 0;
+    float wd_ = 1920.f, ph_ = 0.f;
+    float win_[WT + 1] = {};
 };
 
 }  // namespace dspkit

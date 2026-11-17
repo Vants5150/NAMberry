@@ -16,14 +16,13 @@ static float s_B[GR_MAX_CORES][PL_MAX_BLOCK];	// NAM output
 static float s_Tz[2][PL_MAX_NODES][NT_STAGES][2];		// state of the Bass/Mid/Treble filters of every NAM node (it stays between one plan and the next); [1] = ghost
 static unsigned s_nGh = 0;		// 1 while a ghost runs (always on core 0, with the workers stopped): no level fade, no peaks
 
-// processes node 'nIdx' in place: (pL, pR) goes in and out; *pMono = L and R identical
-static void RunNode (const TPlan *pPlan, int nIdx, float *pL, float *pR, int *pMono, unsigned n, unsigned nCore)
+static float s_Dl[GR_MAX_CORES][PL_MAX_BLOCK];	// dry copy of a bypassed node that keeps running (one per core)
+static float s_Dr[GR_MAX_CORES][PL_MAX_BLOCK];
+
+// processes the block itself (as if it were on): (pL, pR) goes in and out; *pMono = L and R identical
+static void RunNodeOn (const TPlan *pPlan, int nIdx, float *pL, float *pR, int *pMono, unsigned n, unsigned nCore)
 {
 	const TPNode &N = pPlan->Node[nIdx];
-	if (!N.On)
-	{
-		return;
-	}
 	switch (N.Kind)
 	{
 	case NodeNam:
@@ -98,6 +97,79 @@ static void RunNode (const TPlan *pPlan, int nIdx, float *pL, float *pR, int *pM
 		{
 			N.pFx->Process (pL, pR, n, pMono, N.P);
 		}
+		break;
+	}
+}
+
+// processes node 'nIdx' in place, honouring On and the bypass behaviour
+static void RunNode (const TPlan *pPlan, int nIdx, float *pL, float *pR, int *pMono, unsigned n, unsigned nCore)
+{
+	const TPNode &N = pPlan->Node[nIdx];
+	if (N.On)
+	{
+		RunNodeOn (pPlan, nIdx, pL, pR, pMono, n, nCore);
+		return;
+	}
+	const unsigned nMode = (N.Kind == NodeNam || (N.Kind >= FxFirst && N.Kind <= FxLast)) ? N.Byp : BYP_THRU;
+	switch (nMode)
+	{
+	case BYP_MUTE_OUT:
+		for (unsigned j = 0; j < n; j++)
+		{
+			pL[j] = 0.0f;
+			pR[j] = 0.0f;
+		}
+		break;
+
+	case BYP_MUTE_IN:
+		for (unsigned j = 0; j < n; j++)
+		{
+			pL[j] = 0.0f;
+			pR[j] = 0.0f;
+		}
+		RunNodeOn (pPlan, nIdx, pL, pR, pMono, n, nCore);
+		break;
+
+	case BYP_MUTE_FX_IN:
+	case BYP_MUTE_FX_OUT:
+	{
+		float *pDl = s_Dl[nCore];
+		float *pDr = s_Dr[nCore];
+		const int nDryMono = *pMono;
+		for (unsigned j = 0; j < n; j++)
+		{
+			pDl[j] = pL[j];
+			pDr[j] = pR[j];
+		}
+		if (nMode == BYP_MUTE_FX_IN)
+		{
+			for (unsigned j = 0; j < n; j++)
+			{
+				pL[j] = 0.0f;
+				pR[j] = 0.0f;
+			}
+			RunNodeOn (pPlan, nIdx, pL, pR, pMono, n, nCore);
+			for (unsigned j = 0; j < n; j++)
+			{
+				pL[j] += pDl[j];
+				pR[j] += pDr[j];
+			}
+			*pMono = *pMono && nDryMono;
+		}
+		else
+		{
+			int nTmpMono = nDryMono;
+			RunNodeOn (pPlan, nIdx, pL, pR, &nTmpMono, n, nCore);
+			for (unsigned j = 0; j < n; j++)
+			{
+				pL[j] = pDl[j];
+				pR[j] = pDr[j];
+			}
+		}
+		break;
+	}
+
+	default:	// BYP_THRU
 		break;
 	}
 }

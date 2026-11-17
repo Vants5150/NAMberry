@@ -96,9 +96,10 @@ public:
 
         const float depthT = clampf(p.depth, 0.f, 1.f) * vc.depthMs * 1e-3f * fs_;     // samples
         const float delayT = std::max(1.0f, p.delayMs) * 1e-3f * fs_;
-        const float mixT = wetOnly ? 1.f : clampf(p.mix, 0.f, 1.f);
+        const float mixT = clampf(p.mix, 0.f, 1.f);
+        // Wet Only (and the CE-1 vibrato, which is always 100% wet): no dry. In Wet Only Mix still sets the level of the chorus; the vibrato ignores it.
         const float dryT = wetOnly ? 0.f : std::sqrt(std::max(0.f, 1.f - mixT));
-        const float wetT = wetOnly ? 1.f : std::sqrt(mixT);
+        const float wetT = vc.vibrato ? 1.f : (p.wetOnly ? mixT : std::sqrt(mixT));
         const float outG = std::pow(10.f, clampf(p.levelDb, -24.f, 12.f) / 20.f);
         const float fb = clampf(p.feedback, 0.f, 0.6f);
         const float widthT = vc.twoVoices ? clampf(p.width, 0.f, 1.f) : 0.f;

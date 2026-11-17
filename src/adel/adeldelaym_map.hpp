@@ -36,5 +36,7 @@ inline adeldelaym::Params paramsFromControlsM(const float* v) {
     q.duck = v[C_DUCK] * 0.01f;
     q.duckRelMs = v[C_DUCKREL];
     q.hold = v[C_HOLD];
+    q.pitchSemi = v[C_PITCH];
+    q.pitchMix = v[C_PITCHMIX] * 0.01f;
     return q;
 }

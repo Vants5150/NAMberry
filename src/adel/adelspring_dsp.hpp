@@ -193,7 +193,7 @@ public:
             g[s] = std::min(g[s], 0.985f);
         }
         const bool keepDry = p.mixMode == 0 && !p.wetOnly;
-        const float mixT = p.wetOnly ? 1.f : clampf(p.mix, 0.f, 1.f) * (keepDry ? kKeepDryBoost : 1.f);
+        const float mixT = clampf(p.mix, 0.f, 1.f) * (keepDry ? kKeepDryBoost : 1.f);		// Wet Only: no dry, Mix still sets the level of the springs
         const float dryT = p.wetOnly ? 0.f : (keepDry ? 1.f : 1.f - clampf(p.mix, 0.f, 1.f));
         const float outG = std::pow(10.f, clampf(p.outLevelDb, -24.f, 12.f) / 20.f);
         const float dwell = clampf(p.dwell, 0.f, 1.f);

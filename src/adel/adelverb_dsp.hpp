@@ -24,7 +24,7 @@ namespace adelverb {
 struct Params {
     float mix = 0.30f;           // 0..1
     int mixMode = 0;             // 0 = Keep Dry (fixed dry, reverb added), 1 = Crossfade (dry drops with the Mix)
-    bool wetOnly = false;        // output = reverb only (no dry signal); Mix does not count
+    bool wetOnly = false;        // output = reverb only (no dry signal); Mix still sets its level
     float outLevelDb = 0.f;      // overall output level
     float predelayMs = 22.f;
     float decay = 2.8f;          // s
@@ -63,6 +63,8 @@ struct Params {
     float freeze = 0.0f;         // 0 o 1
     float morph = 0.f;           // 0..1
     int morphTarget = 0;         // 0 Plate, 1 Dark Hall, 2 Ambient Wash, 3 Tight Room, 4 Cathedral
+    float shimmer = 0.f;         // 0..1: transposed copy of the tail fed back into the tail (0 = off, identical to the old behaviour)
+    float shimmerSemi = 12.f;    // -12..12 semitones of each pass (12 = octave up, the classic shimmer)
 };
 
 class Reverb {
@@ -93,6 +95,7 @@ public:
         while (sz < need) sz <<= 1;
         pd_.assign(sz, 0.f);
         pdMask_ = sz - 1;
+        for (int c = 0; c < 2; ++c) shPs_[c].init(fs_);
         buildRooms();
         // springs
         const int springLen[2] = {1297, 1511};
@@ -157,6 +160,8 @@ public:
             }
         combW_ = 0;
         for (int ch = 0; ch < 2; ++ch) {
+            shPs_[ch].clear();
+            shOut_[ch] = shLp_[ch][0] = shLp_[ch][1] = 0.f;
             l1_[ch] = l2_[ch] = h1_[ch] = h2_[ch] = 0.f;
             for (int b = 0; b < 3; ++b) eqS_[ch][b][0] = eqS_[ch][b][1] = 0.f;
         }
@@ -234,7 +239,7 @@ public:
         // Mix: mode 0 "Keep Dry" = the dry stays at full level and the reverb is added on top (the volume does not drop);
         // the reverb is raised by 6 dB so that Mix 100% is close to the dry level. Mode 1 = crossfade.
         const bool keepDry = p.mixMode == 0 && !p.wetOnly;
-        const float mixT = p.wetOnly ? 1.f : clampf(p.mix, 0.f, 1.f) * (keepDry ? 2.0f : 1.0f);
+        const float mixT = clampf(p.mix, 0.f, 1.f) * (keepDry ? 2.0f : 1.0f);		// Wet Only: no dry, Mix still sets the level of the reverb
         const float dryT = p.wetOnly ? 0.f : (keepDry ? 1.f : 1.f - clampf(p.mix, 0.f, 1.f));
         const float outG = std::pow(10.f, clampf(p.outLevelDb, -24.f, 12.f) / 20.f);
         const float erT = clampf(p.er, 0.f, 1.f) * 0.35f * (1.f - 0.75f * dist);
@@ -253,6 +258,15 @@ public:
         const uint32_t holdSamples = uint32_t(std::max(5.f, p.gateHoldMs) * 1e-3f * fs);
         const float gateRelC = std::exp(-1.f / (std::max(5.f, p.gateRelMs) * 1e-3f * fs));
         const float vintT = clampf(p.vintage, 0.f, 1.f);
+        const float shimT = clampf(p.shimmer, 0.f, 1.f);
+        const float shRatio = std::pow(2.f, clampf(p.shimmerSemi, -12.f, 12.f) / 12.f);
+        const float shLpC = std::exp(-6.2831853f * std::min(6000.f, 0.4f * fs) / fs);
+        // loop gain of the shimmer path, measured on the host (decay 2.8 s, 440 Hz): at 40% the octave sits about 9 dB below the original
+        // note in the tail, at 100% about level with it. The 16 lines spread the injection, so the figure is not the real round-trip gain.
+#ifndef ADELVERB_SHIM_LOOP_GAIN
+#define ADELVERB_SHIM_LOOP_GAIN 10.0f
+#endif
+        const float shK = ADELVERB_SHIM_LOOP_GAIN / (float(N) * comp);
         // springs: feedback gain from the decay time
         float springG[2];
         for (int s = 0; s < 2; ++s) {
@@ -267,7 +281,7 @@ public:
         if (first_) {
             mix_ = mixT; dryS_ = dryT; erG_ = erT; width_ = widthT; pdCur_ = pdT; lateCur_ = lateT;
             freeze_ = freezeT; drive_ = driveT; duck_ = duckT;
-            spring_ = springT; tuned_ = tunedT; bloom_ = bloomT; gate_ = gateT; vint_ = vintT;
+            spring_ = springT; tuned_ = tunedT; bloom_ = bloomT; gate_ = gateT; vint_ = vintT; shim_ = shimT;
             first_ = false;
         }
         const float fz = freeze_;
@@ -320,6 +334,7 @@ public:
             bloom_ += sm * (bloomT - bloom_);
             gate_ += sm * (gateT - gate_);
             vint_ += sm * (vintT - vint_);
+            shim_ += sm * (shimT - shim_);
             pdCur_ += clampf(pdT - pdCur_, -slewPd, slewPd);
             lateCur_ += clampf(lateT - lateCur_, -slewPd, slewPd);
 
@@ -420,8 +435,9 @@ public:
                 s += z;
             }
             const float mean = 2.f * s / N;
+            const float shG = shK * shim_ * (1.f - freeze_);
             for (int i = 0; i < N; ++i) {
-                line_[i][w_[i] & mask_[i]] = (z_[i] - mean) + inj * sIn[i] * v;
+                line_[i][w_[i] & mask_[i]] = (z_[i] - mean) + inj * sIn[i] * v + shG * (sL[i] * shOut_[0] + sR[i] * shOut_[1]);
                 ++w_[i];
             }
             float wl = 0.f, wr = 0.f;
@@ -431,6 +447,20 @@ public:
             }
             wl *= outScale;
             wr *= outScale;
+            // shimmer: the tail is transposed and goes back into the tail (not while frozen: the loop would gain energy)
+            shPs_[0].push(wl);
+            shPs_[1].push(wr);
+            if (shim_ > 0.002f) {
+                const float in2[2] = {shPs_[0].shifted(shRatio), shPs_[1].shifted(shRatio)};
+                for (int c = 0; c < 2; ++c) {
+                    shLp_[c][0] = (1.f - shLpC) * in2[c] + shLpC * shLp_[c][0];
+                    shLp_[c][1] = (1.f - shLpC) * shLp_[c][0] + shLpC * shLp_[c][1];
+                    const float a = std::fabs(shLp_[c][1]);
+                    shOut_[c] = a < 0.5f ? shLp_[c][1] : (shLp_[c][1] < 0.f ? -1.f : 1.f) * (0.5f + 0.5f * std::tanh((a - 0.5f) / 0.5f));
+                }
+            } else {
+                shOut_[0] = shOut_[1] = 0.f;
+            }
             if (spring_ > 0.002f) {
                 wl = (1.f - spring_) * wl + spring_ * spL * 1.6f;
                 wr = (1.f - spring_) * wr + spring_ * spR * 1.6f;
@@ -716,6 +746,9 @@ private:
     float mix_ = 0, erG_ = 0, width_ = 1, pdCur_ = 0, lateCur_ = 0, freeze_ = 0, drive_ = 0, duck_ = 0, env_ = 0;
     dspkit::AdaaRational adaa_[N];
     float spring_ = 0, tuned_ = 0, bloom_ = 0, gate_ = 0, vint_ = 0;
+    // shimmer: two-head shifters on the tail's output (L, R); result (low-passed, limited) re-enters the FDN on the next sample
+    dspkit::PitchShift2 shPs_[2];
+    float shim_ = 0, shOut_[2] = {}, shLp_[2][2] = {};
     float envF_ = 0, envS_ = 0, gateG_ = 1.f;
     uint32_t sinceOnset_ = 1u << 30, gateTimer_ = 0;
     // springs

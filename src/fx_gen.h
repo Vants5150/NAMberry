@@ -45,7 +45,7 @@ inline const TFxParam g_adelverb_Params[] =
 {
 	{"mix", "Mix", "%", 0.0f, 100.0f, 1.0f, 30.0f, 0, 0, 0, 0, 0, "Amount of reverb relative to the dry signal."},
 	{"mixmode", "Mix Mode", "", 0.0f, 1.0f, 1.0f, 0.0f, 1, 0, 0, g_adelverb_E1, 2, "Keep Dry: the dry stays at full level and the reverb is added (the volume never drops). Crossfade: more Mix, less dry (like a wet/dry mixer)."},
-	{"wetonly", "Wet Only", "", 0.0f, 1.0f, 1.0f, 0.0f, 2, 0, 0, 0, 0, "Output with the reverb only (no dry signal): for a lane dedicated to the wet. In this mode Mix does not matter."},
+	{"wetonly", "Wet Only", "", 0.0f, 1.0f, 1.0f, 0.0f, 2, 0, 0, 0, 0, "Output with the reverb only (no dry signal): for a lane dedicated to the wet. Mix sets the level of the reverb."},
 	{"outlevel", "Output Level", "dB", -24.0f, 12.0f, 0.1f, 0.0f, 0, 0, 0, 0, 0, "Overall output level."},
 	{"predelay", "Pre-delay", "ms", 0.0f, 250.0f, 0.1f, 22.0f, 0, 0, 1, 0, 0, "Delay before the start of the reverb."},
 	{"decay", "Decay", "s", 0.2f, 30.0f, 0.01f, 2.8f, 0, 1, 1, 0, 0, "Decay time (RT60) of the mid frequencies."},
@@ -84,6 +84,8 @@ inline const TFxParam g_adelverb_Params[] =
 	{"freeze", "Freeze", "", 0.0f, 1.0f, 1.0f, 0.0f, 2, 0, 7, 0, 0, "Freezes the tail forever."},
 	{"morph", "Morph", "%", 0.0f, 100.0f, 1.0f, 0.0f, 0, 0, 7, 0, 0, "Fades from your settings towards the chosen character."},
 	{"morphtarget", "Morph Target", "", 0.0f, 4.0f, 1.0f, 0.0f, 1, 0, 7, g_adelverb_E40, 5, "Character towards which the Morph fades."},
+	{"shimmer", "Shimmer", "%", 0.0f, 100.0f, 1.0f, 0.0f, 0, 0, 5, 0, 0, "Adds a transposed copy of the tail to the tail itself: every pass climbs again (an octave at the default Shimmer Pitch), so the tail rises into a halo. 0 = off. Not while Freeze is on."},
+	{"shimmerpitch", "Shimmer Pitch", "st", -12.0f, 12.0f, 1.0f, 12.0f, 0, 0, 5, 0, 0, "Semitones of every pass of the shimmer: 12 = octave up (classic), 7 = fifth, -12 = octave down."},
 };
 
 // ---- ADELdelay (delay) ----
@@ -95,7 +97,7 @@ inline const char *const g_adeldelay_E27[] = {"1/2 per repeat", "1 per repeat", 
 inline const TFxParam g_adeldelay_Params[] =
 {
 	{"mix", "Mix", "%", 0.0f, 100.0f, 1.0f, 35.0f, 0, 0, 0, 0, 0, "Level of the repeats relative to the dry signal."},
-	{"wetonly", "Wet Only", "", 0.0f, 1.0f, 1.0f, 0.0f, 2, 0, 0, 0, 0, "Output with the repeats only (no dry signal): for a lane dedicated to the wet. The level is set with Level."},
+	{"wetonly", "Wet Only", "", 0.0f, 1.0f, 1.0f, 0.0f, 2, 0, 0, 0, 0, "Output with the repeats only (no dry signal): for a lane dedicated to the wet. Mix and Level set the level of the repeats."},
 	{"level", "Level", "dB", -24.0f, 12.0f, 0.1f, 0.0f, 0, 0, 0, 0, 0, "Output level of the repeats."},
 	{"feedback", "Feedback", "%", 0.0f, 110.0f, 1.0f, 40.0f, 0, 0, 0, 0, 0, "Amount of repeats. Above 100% the delay goes into self-oscillation (limited)."},
 	{"time", "Time", "ms", 20.0f, 2000.0f, 1.0f, 400.0f, 0, 1, 1, 0, 0, "Base tempo of the delay (the duration of a quarter note)."},
@@ -125,6 +127,8 @@ inline const TFxParam g_adeldelay_Params[] =
 	{"duck", "Ducking", "%", 0.0f, 100.0f, 1.0f, 0.0f, 0, 0, 6, 0, 0, "Lowers the repeats while you play and lets them rise when you stop."},
 	{"duckrel", "Duck Release", "ms", 50.0f, 2000.0f, 1.0f, 300.0f, 0, 1, 6, 0, 0, "Time over which the repeats rise."},
 	{"hold", "Hold", "", 0.0f, 1.0f, 1.0f, 0.0f, 2, 0, 6, 0, 0, "Freezes the repeats in an infinite loop."},
+	{"pitch", "Pitch", "st", -12.0f, 12.0f, 1.0f, 0.0f, 0, 0, 4, 0, 0, "Transposition of the repeats in semitones: every repeat steps again (12 = each repeat an octave higher). It only acts with Pitch Mix above 0. The repeats stay on the tempo."},
+	{"pitchmix", "Pitch Mix", "%", 0.0f, 100.0f, 1.0f, 0.0f, 0, 0, 4, 0, 0, "Amount of transposed signal in the repeats. 0 = off, the dry signal is never transposed (no added latency)."},
 };
 
 // ---- ADELSendSweep (probe) ----
@@ -151,7 +155,7 @@ inline const TFxParam g_adelspring_Params[] =
 {
 	{"mix", "Mix", "%", 0.0f, 100.0f, 1.0f, 35.0f, 0, 0, 0, 0, 0, "Amount of reverb."},
 	{"mixmode", "Mix Mode", "", 0.0f, 1.0f, 1.0f, 0.0f, 1, 0, 0, g_adelspring_E1, 2, "Keep Dry: the dry always stays at full level and the reverb is added (the sound does not get quieter). Crossfade: dry/reverb crossfade."},
-	{"wetonly", "Wet Only", "", 0.0f, 1.0f, 1.0f, 0.0f, 2, 0, 0, 0, 0, "Reverb only, without dry (for sends and returns)."},
+	{"wetonly", "Wet Only", "", 0.0f, 1.0f, 1.0f, 0.0f, 2, 0, 0, 0, 0, "Reverb only, without dry (for sends and returns). Mix sets its level."},
 	{"outlevel", "Out Level", "dB", -24.0f, 12.0f, 0.1f, 0.0f, 0, 0, 0, 0, 0, "Output level."},
 	{"tank", "Tank", "", 0.0f, 2.0f, 1.0f, 1.0f, 1, 0, 1, g_adelspring_E4, 3, "Length of the springs: Small = short, fast springs, Medium = classic tank, Long = long springs with a more spaced echo. Changing it resets the tail."},
 	{"springs", "Springs", "", 0.0f, 2.0f, 1.0f, 2.0f, 1, 0, 1, g_adelspring_E5, 3, "Number of springs in parallel (1-3): more springs = denser, wider tail. Changing it resets the tail."},
@@ -174,9 +178,9 @@ inline const TFxParam g_adelchorus_Params[] =
 	{"model", "Model", "", 0.0f, 3.0f, 1.0f, 2.0f, 1, 0, 0, g_adelchorus_E0, 4, "Character inspired by the Boss choruses: CE-1 Chorus (warm, mono), CE-1 Vibrato (modulated signal only), CE-2 (lighter, narrow band), CH-1 Super (two stereo voices, more open)."},
 	{"rate", "Rate", "Hz", 0.05f, 12.0f, 0.01f, 0.8f, 0, 1, 0, 0, 0, "LFO speed."},
 	{"depth", "Depth", "%", 0.0f, 100.0f, 1.0f, 60.0f, 0, 0, 0, 0, 0, "How much the delay is modulated (depth of the chorus or vibrato)."},
-	{"mix", "Mix", "%", 0.0f, 100.0f, 1.0f, 50.0f, 0, 0, 0, 0, 0, "Blends dry and modulated signal (constant power). Ignored by CE-1 Vibrato and by Wet Only."},
+	{"mix", "Mix", "%", 0.0f, 100.0f, 1.0f, 50.0f, 0, 0, 0, 0, 0, "Blends dry and modulated signal (constant power). In Wet Only it sets the level of the modulated signal. Ignored by CE-1 Vibrato."},
 	{"level", "Level", "dB", -24.0f, 12.0f, 0.1f, 0.0f, 0, 0, 0, 0, 0, "Output level."},
-	{"wetonly", "Wet Only", "", 0.0f, 1.0f, 1.0f, 0.0f, 2, 0, 0, 0, 0, "Output with the modulated signal only (no dry): for sends and returns or for the vibrato."},
+	{"wetonly", "Wet Only", "", 0.0f, 1.0f, 1.0f, 0.0f, 2, 0, 0, 0, 0, "Output with the modulated signal only (no dry): for sends and returns or for the vibrato. Mix sets its level."},
 	{"delay", "Delay", "ms", 1.0f, 25.0f, 0.01f, 7.0f, 0, 0, 1, 0, 0, "Center delay around which the modulation works: shorter = tighter effect, longer = wider."},
 	{"shape", "LFO Shape", "", 0.0f, 1.0f, 1.0f, 0.0f, 1, 0, 1, g_adelchorus_E7, 2, "LFO shape: the triangle is that of analog choruses, the sine is softer."},
 	{"spread", "Stereo Phase", "°", 0.0f, 180.0f, 0.1f, 180.0f, 0, 0, 1, 0, 0, "LFO phase offset between the two voices (CH-1 Super only): 180 degrees = one voice rises while the other falls."},
@@ -247,7 +251,7 @@ inline const char *const g_adeldelaym_E24[] = {"1/2 per repeat", "1 per repeat",
 inline const TFxParam g_adeldelaym_Params[] =
 {
 	{"mix", "Mix", "%", 0.0f, 100.0f, 1.0f, 35.0f, 0, 0, 0, 0, 0, "Level of the repeats relative to the dry signal."},
-	{"wetonly", "Wet Only", "", 0.0f, 1.0f, 1.0f, 0.0f, 2, 0, 0, 0, 0, "Output with the repeats only (no dry signal): for a lane dedicated to the wet. The level is set with Level."},
+	{"wetonly", "Wet Only", "", 0.0f, 1.0f, 1.0f, 0.0f, 2, 0, 0, 0, 0, "Output with the repeats only (no dry signal): for a lane dedicated to the wet. Mix and Level set the level of the repeats."},
 	{"level", "Level", "dB", -24.0f, 12.0f, 0.1f, 0.0f, 0, 0, 0, 0, 0, "Output level of the repeats."},
 	{"feedback", "Feedback", "%", 0.0f, 110.0f, 1.0f, 40.0f, 0, 0, 0, 0, 0, "Amount of repeats. Above 100% the delay goes into self-oscillation (limited)."},
 	{"time", "Time", "ms", 20.0f, 2000.0f, 1.0f, 400.0f, 0, 1, 1, 0, 0, "Base tempo of the delay (the duration of a quarter note)."},
@@ -274,8 +278,10 @@ inline const TFxParam g_adeldelaym_Params[] =
 	{"duck", "Ducking", "%", 0.0f, 100.0f, 1.0f, 0.0f, 0, 0, 6, 0, 0, "Lowers the repeats while you play and lets them rise when you stop."},
 	{"duckrel", "Duck Release", "ms", 50.0f, 2000.0f, 1.0f, 300.0f, 0, 1, 6, 0, 0, "Time over which the repeats rise."},
 	{"hold", "Hold", "", 0.0f, 1.0f, 1.0f, 0.0f, 2, 0, 6, 0, 0, "Freezes the repeats in an infinite loop."},
+	{"pitch", "Pitch", "st", -12.0f, 12.0f, 1.0f, 0.0f, 0, 0, 4, 0, 0, "Transposition of the repeats in semitones: every repeat steps again (12 = each repeat an octave higher). It only acts with Pitch Mix above 0. The repeats stay on the tempo."},
+	{"pitchmix", "Pitch Mix", "%", 0.0f, 100.0f, 1.0f, 0.0f, 0, 0, 4, 0, 0, "Amount of transposed signal in the repeats. 0 = off, the dry signal is never transposed (no added latency)."},
 };
-inline const unsigned char g_adeldelaym_Map[] = {0, 1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30};  // index of the control in the full specification
+inline const unsigned char g_adeldelaym_Map[] = {0, 1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32};  // index of the control in the full specification
 
 // ---- ADELverb mono (reverb) ----
 inline const char *const g_adelverbm_Groups[] = {"Main", "Space", "Decay Shape", "Motion", "Tone", "Effects", "Dynamics", "Character"};
@@ -288,7 +294,7 @@ inline const TFxParam g_adelverbm_Params[] =
 {
 	{"mix", "Mix", "%", 0.0f, 100.0f, 1.0f, 30.0f, 0, 0, 0, 0, 0, "Amount of reverb relative to the dry signal."},
 	{"mixmode", "Mix Mode", "", 0.0f, 1.0f, 1.0f, 0.0f, 1, 0, 0, g_adelverbm_E1, 2, "Keep Dry: the dry stays at full level and the reverb is added (the volume never drops). Crossfade: more Mix, less dry (like a wet/dry mixer)."},
-	{"wetonly", "Wet Only", "", 0.0f, 1.0f, 1.0f, 0.0f, 2, 0, 0, 0, 0, "Output with the reverb only (no dry signal): for a lane dedicated to the wet. In this mode Mix does not matter."},
+	{"wetonly", "Wet Only", "", 0.0f, 1.0f, 1.0f, 0.0f, 2, 0, 0, 0, 0, "Output with the reverb only (no dry signal): for a lane dedicated to the wet. Mix sets the level of the reverb."},
 	{"outlevel", "Output Level", "dB", -24.0f, 12.0f, 0.1f, 0.0f, 0, 0, 0, 0, 0, "Overall output level."},
 	{"predelay", "Pre-delay", "ms", 0.0f, 250.0f, 0.1f, 22.0f, 0, 0, 1, 0, 0, "Delay before the start of the reverb."},
 	{"decay", "Decay", "s", 0.2f, 30.0f, 0.01f, 2.8f, 0, 1, 1, 0, 0, "Decay time (RT60) of the mid frequencies."},
@@ -326,8 +332,10 @@ inline const TFxParam g_adelverbm_Params[] =
 	{"freeze", "Freeze", "", 0.0f, 1.0f, 1.0f, 0.0f, 2, 0, 7, 0, 0, "Freezes the tail forever."},
 	{"morph", "Morph", "%", 0.0f, 100.0f, 1.0f, 0.0f, 0, 0, 7, 0, 0, "Fades from your settings towards the chosen character."},
 	{"morphtarget", "Morph Target", "", 0.0f, 4.0f, 1.0f, 0.0f, 1, 0, 7, g_adelverbm_E39, 5, "Character towards which the Morph fades."},
+	{"shimmer", "Shimmer", "%", 0.0f, 100.0f, 1.0f, 0.0f, 0, 0, 5, 0, 0, "Adds a transposed copy of the tail to the tail itself: every pass climbs again (an octave at the default Shimmer Pitch), so the tail rises into a halo. 0 = off. Not while Freeze is on."},
+	{"shimmerpitch", "Shimmer Pitch", "st", -12.0f, 12.0f, 1.0f, 12.0f, 0, 0, 5, 0, 0, "Semitones of every pass of the shimmer: 12 = octave up (classic), 7 = fifth, -12 = octave down."},
 };
-inline const unsigned char g_adelverbm_Map[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40};  // index of the control in the full specification
+inline const unsigned char g_adelverbm_Map[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42};  // index of the control in the full specification
 
 // ---- ADELComp (compressor) ----
 inline const char *const g_adelcomp_Groups[] = {"Main", "Dynamics", "Detector", "Sidechain", "Tone", "Stereo", "Gate and Expander", "Meters"};
@@ -367,16 +375,16 @@ inline const TFxParam g_adelcomp_Params[] =
 
 #define FX_GEN_DEFS \
 	{16, "adelphase", "ADELphase (phase)", 20, g_adelphase_Params, 7, g_adelphase_Groups, 0}, \
-	{17, "adelverb", "ADELverb (reverb)", 41, g_adelverb_Params, 8, g_adelverb_Groups, 0}, \
-	{18, "adeldelay", "ADELdelay (delay)", 31, g_adeldelay_Params, 7, g_adeldelay_Groups, 0}, \
+	{17, "adelverb", "ADELverb (reverb)", 43, g_adelverb_Params, 8, g_adelverb_Groups, 0}, \
+	{18, "adeldelay", "ADELdelay (delay)", 33, g_adeldelay_Params, 7, g_adeldelay_Groups, 0}, \
 	{20, "adelsendsweep", "ADELSendSweep (probe)", 7, g_adelsendsweep_Params, 2, g_adelsendsweep_Groups, 0}, \
 	{21, "adelspring", "ADELspring (springs)", 14, g_adelspring_Params, 5, g_adelspring_Groups, 0}, \
 	{22, "adelchorus", "ADELchorus (chorus Boss)", 15, g_adelchorus_Params, 3, g_adelchorus_Groups, 0}, \
 	{27, "adelshifter", "ADELshifter (harmonizer)", 38, g_adelshifter_Params, 7, g_adelshifter_Groups, 0}, \
-	{25, "adeldelaym", "ADELdelay mono (delay)", 28, g_adeldelaym_Params, 7, g_adeldelaym_Groups, 0}, \
-	{26, "adelverbm", "ADELverb mono (reverb)", 40, g_adelverbm_Params, 8, g_adelverbm_Groups, 0}, \
+	{25, "adeldelaym", "ADELdelay mono (delay)", 30, g_adeldelaym_Params, 7, g_adeldelaym_Groups, 0}, \
+	{26, "adelverbm", "ADELverb mono (reverb)", 42, g_adelverbm_Params, 8, g_adelverbm_Groups, 0}, \
 	{19, "adelcomp", "ADELComp (compressor)", 28, g_adelcomp_Params, 8, g_adelcomp_Groups, 0}, \
 
-#define FX_GEN_MAX_PARAMS 41
+#define FX_GEN_MAX_PARAMS 43
 
 #endif

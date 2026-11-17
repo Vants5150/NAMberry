@@ -68,6 +68,7 @@ CFx *NewOpticalLA (float fRate);			// Optical LA Real (fx_la2a.cpp)
 CFx *NewRatTS (float fRate);				// RAT (fx_rat.cpp)
 CFx *NewTubeScreamer (float fRate);			// Tube Screamer (fx_tube.cpp)
 CFx *NewSag (float fRate);				// ADELSag: power-supply sag (fx_sag.cpp)
+CFx *NewNoise (float fRate);				// ADELNoise: hiss and hum (fx_noise.cpp)
 
 // MIDI tempo (clock or tap tempo) in bpm, 0 = unknown: written by the kernel, read by the delays with the "Sync" parameter
 extern volatile float g_fFxTempoBpm;

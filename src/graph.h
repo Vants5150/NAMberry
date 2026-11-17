@@ -17,7 +17,7 @@
 #define PL_MAX_LINKS	160		// links of the network mode (Matrix and Grid)
 #define PL_NET_IN	(-1)		// source of the links: the pedalboard input
 #define PL_NET_OUT	PL_MAX_NODES	// destination of the links: the output (index after the last node)
-#define FX_MAX_P	64		// values per block (parameters of the ADEL plugins: up to 41 plus the outputs)		// maximum frames per audio block
+#define FX_MAX_P	64		// values per block (parameters of the ADEL plugins: up to 43 plus the outputs)		// maximum frames per audio block
 
 enum TNodeKind
 {
@@ -30,10 +30,19 @@ enum TNodeKind
 
 class CFx;
 
+// bypass behaviour of a block (as the Fractal FM3's Bypass Mode)
+#define BYP_THRU	0	// the block is out of the path: the signal passes unchanged, the block does not run (its tails stop)
+#define BYP_MUTE_FX_IN	1	// the dry passes; the block gets silence at its input, so its tails ring out and are added to the dry
+#define BYP_MUTE_FX_OUT	2	// the dry passes; the block keeps running on the live signal but its output is dropped (the effect stays warm)
+#define BYP_MUTE_IN	3	// the block gets silence at its input and only its output (the tails) is heard: no dry
+#define BYP_MUTE_OUT	4	// silence at the output of the block: no dry, no tails
+#define BYP_COUNT	5
+
 struct TPNode
 {
 	u8 Kind;
-	u8 On;			// 0 = excluded (the signal passes unchanged)
+	u8 On;			// 0 = excluded (bypassed: see Byp)
+	u8 Byp;			// bypass behaviour when On = 0 (BYP_*); only NAM and effect blocks use it, the others are always Thru
 	u8 Sel;			// NAM: mask of the active Bass/Mid/Treble filters (namtone.h)
 	adelnam::Instance *pInst;	// NAM: loaded and warmed-up instance (0 = not ready: the block passes the signal)
 	float In, Out;		// NAM: linear gains (model calibration x sliders)

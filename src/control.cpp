@@ -1299,6 +1299,33 @@ THTTPStatus CControl::HandlePre (const char *pFormData, u8 *pBuffer, unsigned *p
 		}
 		nOp = Op[0] == 'l' ? 2 : 3;
 	}
+	else if (strcmp (Op, "rename") == 0)
+	{
+		// n = current name, nn = new name (the preset keeps its position, so the MIDI Program Change numbers do not move)
+		char RawNew[BP_NAME_LEN * 3 + 8], NewName[BP_NAME_LEN + 4];
+		if (nAt < 0)
+		{
+			return Reply (pBuffer, pLength, ppContentType, "{\"ok\":0,\"err\":\"no such preset\"}");
+		}
+		if (!GetField (pFormData, "nn", RawNew, sizeof RawNew))
+		{
+			return Reply (pBuffer, pLength, ppContentType, "{\"ok\":0,\"err\":\"incomplete request\"}");
+		}
+		UrlDecode (RawNew, NewName, sizeof NewName);
+		if (!BpValidName (NewName))
+		{
+			return Reply (pBuffer, pLength, ppContentType, "{\"ok\":0,\"err\":\"invalid name (1-31 characters, no quotation marks or backslashes)\"}");
+		}
+		for (unsigned i = 0; i < PRE_MAX; i++)
+		{
+			if (m_pContext->pPreName[i][0] != 0 && strcmp (m_pContext->pPreName[i], NewName) == 0 && m_pContext->pPreMode[i] == nPreMode)
+			{
+				return Reply (pBuffer, pLength, ppContentType, "{\"ok\":0,\"err\":\"a preset with this name already exists\"}");
+			}
+		}
+		CParams::Copy (m_pContext->PreArg2, NewName, BP_NAME_LEN);
+		nOp = 4;
+	}
 	else
 	{
 		return Reply (pBuffer, pLength, ppContentType, "{\"ok\":0,\"err\":\"unknown operation\"}");
@@ -1530,6 +1557,8 @@ static void WriteChain (CBuf &B, const CBoard &Bd, int nFirst)
 		B.I ((unsigned) nFirst);
 		B.S (",\"on\":");
 			B.I (Bl.On ? 1 : 0);
+			B.S (",\"byp\":");
+			B.I ((unsigned) Bl.Byp);
 			if (Bl.Preset[0] != 0)
 			{
 				B.S (",\"pr\":");

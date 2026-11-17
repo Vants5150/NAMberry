@@ -13,3 +13,6 @@ ota.key
 *.key
 *.pem
 *.log
+*.d
+*.lst
+control_page_gz.h

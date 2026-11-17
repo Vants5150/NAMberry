@@ -85,8 +85,9 @@ struct TCtlContext
 	char (*pPreName)[BP_NAME_LEN];		// pedalboard presets: names by position (empty = free position)
 	char PreCur[BP_NAME_LEN];		// preset in use (empty = none)
 	volatile boolean PreDirty;		// the pedalboard was modified after the preset was loaded or saved
-	volatile unsigned PrePending;		// 0 nothing, 1 save, 2 load, 3 delete: run by the main loop
+	volatile unsigned PrePending;		// 0 nothing, 1 save, 2 load, 3 delete, 4 rename: run by the main loop
 	char PreArg[BP_NAME_LEN];
+	char PreArg2[BP_NAME_LEN];		// rename: the new name
 	unsigned PreArgMode;		// mode of the preset being operated on		// to be saved on the card (done by the main loop)
 	unsigned Mode;				// active mode: 0 = ADELFlow, 1 = ADELMatrix, 2 = ADELGrid
 	volatile unsigned ModePending;		// mode requested by the page (MODE_NONE = none): the change is run by the main loop

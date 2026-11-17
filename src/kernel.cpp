@@ -723,6 +723,7 @@ void CKernel::ControlInit (void)
 	m_Ctl.PreDirty = FALSE;
 	m_Ctl.PrePending = 0;
 	m_Ctl.PreArg[0] = 0;
+	m_Ctl.PreArg2[0] = 0;
 	m_PreCurWritten[0] = 0;
 	for (unsigned i = 0; i < PRE_MAX; i++)
 	{
@@ -2080,6 +2081,70 @@ void CKernel::PreTick (void)
 				m_bPreDirtyBoot = FALSE;
 			}
 			m_Logger.Write (FromKernel, LogNotice, "Preset \"%s\" deleted", Name);
+		}
+		else if (nOp == 4 && nAt >= 0)
+		{
+			// rename: only the first line of the file ("n NAME") changes; the slot, and so the MIDI Program Change number, stays
+			char NewName[BP_NAME_LEN];
+			CParams::Copy (NewName, m_Ctl.PreArg2, BP_NAME_LEN);
+			char (&Text)[32768 + 64] = *reinterpret_cast<char (*)[32768 + 64]> (Scratch ());
+			CString Path;
+			PrePath (&Path, (unsigned) nAt);
+			FIL File;
+			boolean bOk = FALSE;
+			UINT nRead = 0;
+			if (f_open (&File, Path, FA_READ | FA_OPEN_EXISTING) == FR_OK)
+			{
+				bOk = f_read (&File, Text, sizeof Text - 1, &nRead) == FR_OK;
+				f_close (&File);
+			}
+			if (bOk)
+			{
+				unsigned nBody = 0;
+				while (nBody < nRead && Text[nBody] != '\n')
+				{
+					nBody++;
+				}
+				if (nBody < nRead)
+				{
+					nBody++;		// after the newline
+				}
+				char Head[BP_NAME_LEN + 8];
+				unsigned nHead = 0;
+				Head[nHead++] = 'n';
+				Head[nHead++] = ' ';
+				for (const char *s = NewName; *s && nHead < BP_NAME_LEN + 4; s++)
+				{
+					Head[nHead++] = *s;
+				}
+				Head[nHead++] = '\n';
+				bOk = FALSE;
+				if (f_open (&File, DRIVE "/pre.tmp", FA_WRITE | FA_CREATE_ALWAYS) == FR_OK)
+				{
+					UINT nW1 = 0, nW2 = 0;
+					const FRESULT R1 = f_write (&File, Head, nHead, &nW1);
+					const FRESULT R2 = f_write (&File, Text + nBody, nRead - nBody, &nW2);
+					f_close (&File);
+					if (R1 == FR_OK && R2 == FR_OK && nW1 == nHead && nW2 == nRead - nBody)
+					{
+						f_unlink (Path);
+						bOk = f_rename (DRIVE "/pre.tmp", Path) == FR_OK;
+					}
+				}
+			}
+			if (bOk)
+			{
+				CParams::Copy (m_PreName[nAt], NewName, BP_NAME_LEN);
+				if (strcmp (m_Ctl.PreCur, Name) == 0)
+				{
+					CParams::Copy (m_Ctl.PreCur, NewName, BP_NAME_LEN);
+				}
+				m_Logger.Write (FromKernel, LogNotice, "Preset \"%s\" renamed \"%s\"", Name, NewName);
+			}
+			else
+			{
+				m_Logger.Write (FromKernel, LogError, "Preset \"%s\": rename failed", Name);
+			}
 		}
 		m_Ctl.PrePending = 0;
 		PreViewBuild ();

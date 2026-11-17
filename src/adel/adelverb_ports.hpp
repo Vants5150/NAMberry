@@ -43,6 +43,8 @@ enum PortIndex {
     P_FREEZE,
     P_MORPH,
     P_MORPHTARGET,
+    P_SHIMMER,
+    P_SHIMMERPITCH,
     P_COUNT
 };
 
@@ -89,4 +91,6 @@ static const float kPortDefaults[P_COUNT] = {
     0.0f,
     0.0f,
     0.0f,
+    0.0f,
+    12.0f,
 };

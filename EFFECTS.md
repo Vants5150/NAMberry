@@ -387,6 +387,25 @@ Supply presets (Depth = gain drop at full power, Attack = Recovery = plate time 
 | Rail | 0 to 100 % | Plate supply as a percentage of its idle value (read-only). |
 | Gain Reduction | 0 to 12 dB | Gain applied by the block (read-only). |
 
+### Noise (hiss and hum)
+
+*Block name: ADELNoise - Noise of an amplifier.*
+
+Adds to the signal the noise that a captured amplifier has and a NAM model cannot reproduce. Use two blocks: **Hiss before the NAM** (Hum at its minimum), **Hum after the NAM** (Hiss at its minimum). Hiss goes before the NAM because it is the input noise of the amplifier: the NAM amplifies it like the real stages (a high-gain model amplifies a small noise much more than a clean one, and a loud note compresses it). Measured on the firmware's engine with the default Hiss: the JC800 Hi Lead capture gives -75.4 dBFS at the output (-14.4 dBFS with a -20 dBFS sine: 61 dB), the Lanney Crunch capture -101.5 dBFS (83 dB). With both levels at their minimum the block does not change the signal.
+
+Basis: the Svetlana 12AX7 datasheet (typical equivalent hum and noise voltage 1.8 uV per section, grid resistance 0: -112.7 dBu, that is -127.7 dBFS for a model with +15 dBu at 0 dBFS, the default Hiss); Mojotone, "Hiss, Hum, Crackle, Buzz - What is a Noise Floor?" (the noise floor depends on the gain; high-gain amplifiers have built-in hiss); Wikipedia, "Hum bar" (rectifier hum at twice the mains frequency with heavy harmonic content; heater hum at the mains frequency). The white / pink mix, the default bandwidth, the harmonic amplitudes of the three hum types and the default hum level are chosen, not measured. Levels are rms before the Hiss filters; the Noise level output shows what is really added. The same noise goes to both channels.
+
+| Control | Range | What it does |
+|---|---|---|
+| Hiss | -130 to -30 dB | rms level (dBFS) of the hiss before the filters; the minimum switches it off. Default -127.5 dB. dBFS = dBu - the model's input level. |
+| Hiss color | 0 to 100 % | 0 = white, 100 = pink (-3 dB per octave). |
+| Hiss bandwidth | 1 to 20 kHz | Low-pass, two poles. |
+| Hiss low cut | 20 to 400 Hz | High-pass, one pole. |
+| Hum | -120 to -30 dB | rms level (dBFS) of the hum; the minimum switches it off. |
+| Hum type | choice | Supply ripple (twice the mains frequency, sawtooth-like series of 8 harmonics), Heater / induction (mains frequency, 6 harmonics), Ground-loop buzz (mains frequency, 20 harmonics, amplitude 1/sqrt(k)). |
+| Mains | choice | 50 or 60 Hz. |
+| Noise level | -140 to 0 dB | rms of the noise really added, 0.2 s average (read-only). |
+
 ### Tone Stack (Fender / Marshall)
 
 *Block name: ADELToneStackReal - Passive tone network.*
@@ -444,7 +463,7 @@ Reverb. Mono-lane version has a single output and no Width control.
 |---|---|---|
 | Mix | 0 to 100 % | Amount of reverb relative to the dry signal. |
 | Mix Mode | choice | Keep Dry: the dry stays at full level and the reverb is added (the volume never drops). Crossfade: more Mix, less dry (like a wet/dry mixer). |
-| Wet Only | 0 to 1 | Output with the reverb only (no dry signal): for a lane dedicated to the wet. In this mode Mix does not matter. |
+| Wet Only | 0 to 1 | Output with the reverb only (no dry signal): for a lane dedicated to the wet. Mix sets the level of the reverb. |
 | Output Level | -24 to 12 dB | Overall output level. |
 | Pre-delay | 0 to 250 ms | Delay before the start of the reverb. |
 | Decay | 0.2 to 30 s | Decay time (RT60) of the mid frequencies. |
@@ -483,6 +502,8 @@ Reverb. Mono-lane version has a single output and no Width control.
 | Freeze | 0 to 1 | Freezes the tail forever. |
 | Morph | 0 to 100 % | Fades from your settings towards the chosen character. |
 | Morph Target | choice | Character towards which the Morph fades. |
+| Shimmer | 0 to 100 % | Adds a transposed copy of the tail to the tail itself: every pass climbs again (an octave at the default Shimmer Pitch), so the tail rises into a halo. 0 = off. Not while Freeze is on. |
+| Shimmer Pitch | -12 to 12 st | Semitones of every pass of the shimmer: 12 = octave up (classic), 7 = fifth, -12 = octave down. |
 
 ### ADELdelay / ADELdelay mono
 
@@ -492,7 +513,7 @@ Stereo delay (ping-pong, tap spread); the mono version uses one delay line.
 | Control | Range | What it does |
 |---|---|---|
 | Mix | 0 to 100 % | Level of the repeats relative to the dry signal. |
-| Wet Only | 0 to 1 | Output with the repeats only (no dry signal): for a lane dedicated to the wet. The level is set with Level. |
+| Wet Only | 0 to 1 | Output with the repeats only (no dry signal): for a lane dedicated to the wet. Mix and Level set the level of the repeats. |
 | Level | -24 to 12 dB | Output level of the repeats. |
 | Feedback | 0 to 110 % | Amount of repeats. Above 100% the delay goes into self-oscillation (limited). |
 | Time | 20 to 2000 ms | Base tempo of the delay (the duration of a quarter note). |
@@ -522,6 +543,8 @@ Stereo delay (ping-pong, tap spread); the mono version uses one delay line.
 | Ducking | 0 to 100 % | Lowers the repeats while you play and lets them rise when you stop. |
 | Duck Release | 50 to 2000 ms | Time over which the repeats rise. |
 | Hold | 0 to 1 | Freezes the repeats in an infinite loop. |
+| Pitch | -12 to 12 st | Transposition of the repeats in semitones: every repeat steps again (12 = each repeat an octave higher). It only acts with Pitch Mix above 0. The repeats stay on the tempo. |
+| Pitch Mix | 0 to 100 % | Amount of transposed signal in the repeats. 0 = off, the dry signal is never transposed (no added latency). |
 
 ### ADELspring
 
@@ -532,7 +555,7 @@ Spring reverb.
 |---|---|---|
 | Mix | 0 to 100 % | Amount of reverb. |
 | Mix Mode | choice | Keep Dry: the dry always stays at full level and the reverb is added (the sound does not get quieter). Crossfade: dry/reverb crossfade. |
-| Wet Only | 0 to 1 | Reverb only, without dry (for sends and returns). |
+| Wet Only | 0 to 1 | Reverb only, without dry (for sends and returns). Mix sets its level. |
 | Out Level | -24 to 12 dB | Output level. |
 | Tank | choice | Length of the springs: Small = short, fast springs, Medium = classic tank, Long = long springs with a more spaced echo. Changing it resets the tail. |
 | Springs | choice | Number of springs in parallel (1-3): more springs = denser, wider tail. Changing it resets the tail. |
@@ -555,9 +578,9 @@ BBD-style chorus/vibrato inspired by the Boss CE-1, CE-2 and CH-1 (a general eff
 | Model | choice | Character inspired by the Boss choruses: CE-1 Chorus (warm, mono), CE-1 Vibrato (modulated signal only), CE-2 (lighter, narrow band), CH-1 Super (two stereo voices, more open). |
 | Rate | 0.05 to 12 Hz | LFO speed. |
 | Depth | 0 to 100 % | How much the delay is modulated (depth of the chorus or vibrato). |
-| Mix | 0 to 100 % | Blends dry and modulated signal (constant power). Ignored by CE-1 Vibrato and by Wet Only. |
+| Mix | 0 to 100 % | Blends dry and modulated signal (constant power). In Wet Only it sets the level of the modulated signal. Ignored by CE-1 Vibrato. |
 | Level | -24 to 12 dB | Output level. |
-| Wet Only | 0 to 1 | Output with the modulated signal only (no dry): for sends and returns or for the vibrato. |
+| Wet Only | 0 to 1 | Output with the modulated signal only (no dry): for sends and returns or for the vibrato. Mix sets its level. |
 | Delay | 1 to 25 ms | Center delay around which the modulation works: shorter = tighter effect, longer = wider. |
 | LFO Shape | choice | LFO shape: the triangle is that of analog choruses, the sine is softer. |
 | Stereo Phase | 0 to 180 ° | LFO phase offset between the two voices (CH-1 Super only): 180 degrees = one voice rises while the other falls. |
@@ -810,8 +833,26 @@ These blocks were written from general knowledge of the effect type, **without**
 
 Some of the "Real" names above started as blocks of this kind and were rebuilt from schematics; the ones still in this list have not been.
 
+## Bypass behaviour
+
+Every NAM and effect block (not the Selector, Volume, Pan or routing blocks) has a Bypass behaviour, chosen in the block editor, that sets what happens when the block is off. It works like the Bypass Mode of the Fractal FM3. It is saved with the preset; presets saved before it existed keep the old behaviour (Thru).
+
+| Mode | When the block is off |
+|---|---|
+| Thru | The block is out of the path: the sound passes unchanged and the block stops, so delay and reverb tails are cut (the original behaviour). |
+| Mute FX In | The dry sound passes. The block gets silence at its input, so its tails ring out on top of the dry. |
+| Mute FX Out | The dry sound passes. The block keeps running on the live signal but is not heard, so it is ready, without a cold start, when it is turned on again. |
+| Mute In | Silence goes into the block and only its tails are heard: the dry does not pass. |
+| Mute Out | Silence at the output of the block: nothing passes, no dry and no tails. |
+
+Mute FX In, Mute FX Out and Mute In keep the block running, so a bypassed block costs processor time like an active one, and the load estimate counts it.
+
 ## Honest limits
 
 * No effect has been compared with recordings of the real pedal unless stated (Tube Screamer, RAT and the optical compressor are the ones fitted to real data).
 * Sample rate is 48 kHz; most circuit models run without oversampling, so hard clipping can alias.
 * Potentiometer tapers are assumed linear or log where the source does not say.
+
+### Shimmer and transposed repeats (ADELverb, ADELdelay)
+
+Both use a two-head delay-line pitch shifter (`PitchShift2` in `adel/dspkit.hpp`, 40 ms grain): it follows chords because it does not detect the pitch, and it sits only inside the feedback paths, so the dry signal never goes through it and nothing is added to the playing latency. Limits, stated plainly: the shifted signal is late by about 20 ms (the delay takes it off the read time so the repeats stay on the tempo; in the reverb it is simply part of the tail); sustained notes show a slight amplitude ripple (warble) typical of this method; the shimmer path is low-passed at 6 kHz and limited, and is switched off while Freeze is on. Checked on the host with `test_pitch_shimmer.cpp` (pitch and tempo of the repeats, dry identical, stability up to a 30 s decay); not yet judged by ear and not loaded on the board. All the new controls default to off, with the old settings the output is bit-identical.

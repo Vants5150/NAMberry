@@ -22,6 +22,7 @@ struct TBdBlock
 	boolean Used;
 	u8 Type;		// TNodeKind
 	boolean On;
+	u8 Byp;			// bypass behaviour when Off (BYP_*, graph.h); used by NAM and effect blocks
 	int A, B;		// Grid: row and column of the cell
 	float V[FX_MAX_P];		// NAM: V0 = input dB, V1 = output dB, V2/V3/V4 = bass/mid/treble dB (0 = flat) | Volume: V0 = dB | Pan: V0 = position
 	char Preset[BD_PRESET_LEN];	// saved setting in use (empty = none); the page compares it with the values

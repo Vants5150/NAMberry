@@ -12,7 +12,7 @@
 #define PARAM_MAX_BLOCKS	8
 #define PARAM_MAX_PARAMS	10
 #define PARAM_TEXT_LEN		48
-#define LIB_MAX_FILES		320	// .adn models in the library (it was 256: 790 bytes of fixed memory per slot, offset by lower LIB_MAX_IR and UP_INF_MAX)
+#define LIB_MAX_FILES		340	// .adn models in the library (it was 256, then 320: 790 bytes of fixed memory per slot, offset by lower LIB_MAX_IR and UP_INF_MAX)
 #define LIB_MAX_IR		128	// cabinet IRs (.air)
 
 enum TParamKind

@@ -80,6 +80,11 @@ body.nobm .bk:not(.io) .mt{display:none}
 .bk.cg{background:#cdeedb}.bk.cg svg{stroke:#17713f}
 .bk.cb{background:#cfe3fb}.bk.cb svg{stroke:#1d56a6}
 .bk.co{background:#fde0c2}.bk.co svg{stroke:#b4540a}
+.bk.cy{background:#fbeeb0}.bk.cy svg{stroke:#8a6d00}
+.bk.cn{background:#cdeee6}.bk.cn svg{stroke:#0f6e56}
+/* colours of the entries in the block menus (effect families)*/
+option.cg{background:#cdeedb;color:#0e3d22}option.cb{background:#cfe3fb;color:#0d2f5c}option.co{background:#fde0c2;color:#5c2a04}
+option.cy{background:#fbeeb0;color:#4a3a00}option.cw{background:#f3f4f6;color:#1a1d23}option.cn{background:#cdeee6;color:#0a3f31}
 .bk.dragging{opacity:.3}
 .gh{position:fixed;z-index:50;pointer-events:none;opacity:.92;transform:translate(-50%,-50%);box-shadow:0 6px 18px rgba(0,0,0,.5)}
 .ch.dz{outline:2px dashed #a78bfa;outline-offset:5px;border-radius:6px}
@@ -438,7 +443,7 @@ const addOpts=depth=>[["nam","NAM"],["vol","Volume"],["rout","Routing (routing o
 function fxSortKey(t){return String(t).replace(/^ToTest - /,"").replace(/^ADEL\s*/i,"")}
 const fxMixIdx=n=>{const d=fxd(n.fx);return d?d.p.findIndex(p=>p.k=="mix"):-1};
 /* ToTest effects (fx_extra.cpp): they keep a mono input mono, except these four, which make the output stereo*/
-const XFX=["tsdrive","muff","fuzzface","tremolo","harmtrem","autowah","octaver","noisegate","univibe","flanger","rotary","tapeecho","booster","tonestack","swell","widener","vibrato","centaur","bluesdrv","ds1","ocd","guvnor","rangemaster","fz1","bender","fuzzfactory","phase90","smallstone","ce1","ce2","ad9","mflanger","dimension","autopan","slicer","crybaby","womantone","geq6","dynacomp","optocomp","limiter","analogdelay","duckdelay","sustainer","selector","tubescreamer","ratts","opticalla","sag"];
+const XFX=["tsdrive","muff","fuzzface","tremolo","harmtrem","autowah","octaver","noisegate","univibe","flanger","rotary","tapeecho","booster","tonestack","swell","widener","vibrato","centaur","bluesdrv","ds1","ocd","guvnor","rangemaster","fz1","bender","fuzzfactory","phase90","smallstone","ce1","ce2","ad9","mflanger","dimension","autopan","slicer","crybaby","womantone","geq6","dynacomp","optocomp","limiter","analogdelay","duckdelay","sustainer","selector","tubescreamer","ratts","opticalla","sag","noise"];
 const fxStereoOut=n=>["adelverb","adeldelay","adelspring","adelchorus","adelshifter","shiftermanual","secondhand","rotary","widener","dimension","autopan"].includes(n.fx);
 const GL={
   io_in:'<svg viewBox="0 0 24 24"><path d="M3 12h13M12 7l5 5-5 5M20 5v14"/></svg>',
@@ -464,7 +469,7 @@ GL.adeldelaym=GL.delay;GL.adelverbm=GL.reverb;
 GL.tsdrive=GL.muff=GL.fuzzface=GL.booster='<svg viewBox="0 0 24 24"><path d="M3 18l4-12h4v12h4V6h4l2 12"/></svg>';
 GL.tremolo=GL.harmtrem=GL.univibe=GL.flanger=GL.vibrato=GL.rotary=GL.adelchorus;
 GL.tapeecho=GL.delay;GL.noisegate=GL.swell=GL.compressor;GL.autowah=GL.tonestack=GL.adelequal;GL.octaver=GL.adelshifter;GL.widener=GL.pan;
-GL.centaur=GL.bluesdrv=GL.ds1=GL.ocd=GL.guvnor=GL.rangemaster=GL.fz1=GL.bender=GL.fuzzfactory=GL.tubescreamer=GL.ratts=GL.tsdrive;GL.opticalla=GL.compressor;GL.sag='<svg viewBox="0 0 24 24"><path d="M3 7h5l3 9h2l3-9h5"/></svg>';
+GL.centaur=GL.bluesdrv=GL.ds1=GL.ocd=GL.guvnor=GL.rangemaster=GL.fz1=GL.bender=GL.fuzzfactory=GL.tubescreamer=GL.ratts=GL.tsdrive;GL.opticalla=GL.compressor;GL.noise='<svg viewBox="0 0 24 24"><path d="M3 12l2-4 2 8 2-10 2 12 2-9 2 6 2-3 2 2 2-2"/></svg>';GL.sag='<svg viewBox="0 0 24 24"><path d="M3 7h5l3 9h2l3-9h5"/></svg>';
 GL.phase90=GL.smallstone=GL.phaser;GL.ce1=GL.ce2=GL.dimension=GL.vibrato;GL.autopan=GL.slicer=GL.widener;GL.crybaby=GL.womantone=GL.geq6=GL.adelequal;
 GL.dynacomp=GL.limiter=GL.sustainer=GL.compressor;GL.analogdelay=GL.duckdelay=GL.ad9=GL.delay;GL.mflanger=GL.flanger;
 GL.selector=GL.rout;
@@ -485,10 +490,20 @@ function tileHtml(n,mono){
 let drag=null,dndSkip=false;
 function isOff(n){return !n.on}
 /* tile color by effect family*/
-const REVERBS=["adelverb","adelverbm","adelspring","reverb"];
-const DELAYS=["adeldelay","adeldelaym","delay","tapeecho","analogdelay","duckdelay"];
+/* same families as the Live Display: reverbs green, delays blue, modulations yellow, drives orange, other effects (utility, dynamics, tone) white*/
 const DRIVES=["tsdrive","tubescreamer","ratts","muff","fuzzface","centaur","bluesdrv","ds1","ocd","guvnor","rangemaster","fz1","bender","fuzzfactory","booster"];
-const catCls=n=>n.t!="fx"?"":(REVERBS.includes(n.fx)?" cg":(DELAYS.includes(n.fx)?" cb":(DRIVES.includes(n.fx)?" co":"")))
+const fxFam=k=>{
+  if(k=="nam")return "cn";
+  const f=String(k||"").toLowerCase();
+  if(!f||["vol","rout","pan","__paste"].includes(f))return "";
+  if(/verb|spring/.test(f))return "cg";
+  if(/delay|echo|dm2/.test(f)||f=="ad9")return "cb";
+  if(DRIVES.includes(f))return "co";
+  if(/chorus|phase|flang|trem|vibe|secondhand|dimension|pitch|harm|shifter/.test(f)||["ce1","ce2","rotary"].includes(f))return "cy";
+  return "cw";
+};
+const catCls=n=>{if(n.t!="fx")return "";const c=fxFam(n.fx);return c&&c!="cw"?" "+c:""};
+const optFam=(o,k)=>{const c=fxFam(k);if(c)o.className=c};
 /* settings saved on the board*/
 const typeKey=n=>n.t=="fx"?"fx:"+n.fx:n.t;
 function pairsOf(n){
@@ -559,7 +574,7 @@ function editor(info){
     const cur=n.t=="fx"?n.fx:(n.t=="vol"&&n.rt?"rout":n.t),ts=el("select","tsel");ts.title="Block type: choosing another one replaces this block";
     const opts=addOpts(0);
     if(n.t=="fx"&&!opts.some(o=>o[0]==cur)){const d=fxd(cur);opts.push([cur,d?d.title:cur])}
-    opts.forEach(([v,tx])=>{const o=el("option","",esc(tx));o.value=v;ts.appendChild(o)});
+    opts.forEach(([v,tx])=>{const o=el("option","",esc(tx));o.value=v;optFam(o,v);ts.appendChild(o)});
     ts.value=cur;
     ts.onchange=async()=>{
       const k=ts.value;if(k==cur)return;
@@ -571,6 +586,19 @@ function editor(info){
   h.appendChild(btn("✕","Remove the block",()=>{if(confirm("Remove the block?")){sel=null;g({op:"del",id:n.id}).then(warn)}},"del"));
   c.appendChild(h);
   c.appendChild(toolsRow(n,info));
+  if(n.t=="nam"||(n.t=="fx"&&n.fx!="selector")){
+    /* what the block does when it is off (the Fractal FM3's Bypass Mode)*/
+    const BYPS=[["Thru","The block is out of the path: the sound passes unchanged and the block stops (its tails are cut)."],
+      ["Mute FX In","The dry passes; the block gets silence, so its tails (delay, reverb) ring out on top of the dry."],
+      ["Mute FX Out","The dry passes; the block keeps running on the live sound but is not heard, so it is ready (no cold start) when you turn it on again."],
+      ["Mute In","Silence into the block: only its tails are heard, the dry does not pass."],
+      ["Mute Out","Silence at the output: nothing passes, no dry and no tails."]];
+    const br=el("div","row"),bl=el("label","","Bypass behaviour"),bs=el("select","");
+    BYPS.forEach(([t],i)=>{const o=el("option","",t);o.value=i;bs.appendChild(o)});
+    bs.onchange=()=>{bs.title=BYPS[+bs.value][1];g({op:"set",id:n.id,k:"byp",v:+bs.value}).then(warn)};
+    br.appendChild(bl);br.appendChild(bs);c.appendChild(br);
+    addBind(n.id,nn=>{const v=nn.byp||0;if(document.activeElement!==bs)bs.value=v;bs.title=BYPS[v][1]});
+  }
   if(n.t=="nam"){
     const m=modelRow(n);c.appendChild(m);addBind(n.id,nn=>m.sync(nn));
     const inf=el("div","info");c.appendChild(inf);
@@ -598,6 +626,7 @@ const IC_SAVE='<svg viewBox="0 0 24 24"><path d="M5 3h12l4 4v14H5z"/><path d="M8
 const IC_SAVEAS='<svg viewBox="0 0 24 24"><path d="M4 3h10l4 4v5M4 3v18h9"/><path d="M7 3v5h6V3M7 21v-6h5"/><path d="M18 15v6M15 18h6"/></svg>';
 const modeIc=m=>IC_GRID;
 const IC_GRID='<svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.2"/><rect x="13" y="4" width="7" height="7" rx="1.2"/><rect x="4" y="13" width="7" height="7" rx="1.2"/><rect x="13" y="13" width="7" height="7" rx="1.2"/></svg>';
+const IC_REN='<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4zM13 7l4 4"/></svg>';
 const IC_DEL='<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14M10 11v6M14 11v6"/></svg>';
 /* ---- models: .nam -> .adn conversion in the page (like nam2adn.py), upload to the Pi in pieces, TONE3000 selector ----*/
 const b64u=u8=>{let s="";for(let i=0;i<u8.length;i++)s+=String.fromCharCode(u8[i]);return btoa(s).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"")};
@@ -1152,9 +1181,17 @@ function presetBar(){
   const sv=btn("","Save (overwrites the preset in use)",async()=>{if(!cur)return saveAs();warn(await api("/pre",{op:"save",n:cur}))});
   sv.innerHTML=IC_SAVE;
   const sa=btn("","Save as...",saveAs);sa.innerHTML=IC_SAVEAS;
+  /* rename: the preset keeps its position (and so its MIDI Program Change number)*/
+  const rn=btn("","Rename the preset in use",async()=>{
+    if(!cur)return;
+    const nm=prompt("New name for '"+cur+"':",cur);
+    if(!nm||!nm.trim()||nm.trim()==cur)return;
+    warn(await api("/pre",{op:"rename",n:cur,nn:nm.trim(),m:cm}));
+  });
+  rn.innerHTML=IC_REN;if(!cur)rn.disabled=true;
   const dl=btn("","Delete the preset in use",async()=>{if(cur&&confirm("Delete preset '"+cur+"'? The current blocks do not change."))warn(await api("/pre",{op:"del",n:cur,m:cm}))});
   dl.innerHTML=IC_DEL;if(!cur)dl.disabled=true;
-  w.appendChild(sl);w.appendChild(sv);w.appendChild(sa);w.appendChild(dl);
+  w.appendChild(sl);w.appendChild(sv);w.appendChild(sa);w.appendChild(rn);w.appendChild(dl);
   return w;
 }
 function ioPanel(which){
@@ -1510,7 +1547,7 @@ async function spliceLinks(id,r,c){
 function netAddMenu(btnEl,args){
   btnEl.onclick=()=>{
     const s=el("select","pbs");
-    [["","Block..."]].concat(blkClip?[["__paste","Paste: "+blkClip.name]]:[],addOpts(3)).forEach(([v,t])=>{const o=el("option","",esc(t));o.value=v;s.appendChild(o)});
+    [["","Block..."]].concat(blkClip?[["__paste","Paste: "+blkClip.name]]:[],addOpts(3)).forEach(([v,t])=>{const o=el("option","",esc(t));o.value=v;optFam(o,v);s.appendChild(o)});
     s.onchange=async()=>{const k=s.value;if(k=="__paste"){await pasteBlock(args);return}if(k){const r=await g({op:"add",k,...args});warn(r);if(r.ok){sel=r.id;if(args.r!==undefined)await spliceLinks(r.id,args.r,args.p)}}};
     s.onblur=()=>{if(s.parentNode)s.replaceWith(btnEl)};
     btnEl.replaceWith(s);s.focus();

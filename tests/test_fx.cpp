@@ -583,7 +583,7 @@ int main ()
 		OK (A.NetAdd ("adelcomp", 0, 1, "", &c1));
 		OK (A.NetAdd ("adelverb", 1, 1, "", &v1));
 		const TFxDef *dc = FxDefByType (FxAdelComp), *dv = FxDefByType (FxAdelVerb);
-		CHECK (dc != 0 && dv != 0 && dc->nParams == 28 && dv->nParams == 41);
+		CHECK (dc != 0 && dv != 0 && dc->nParams == 28 && dv->nParams == 43);
 		for (unsigned k = 0; k < dc->nParams; k++)
 		{
 			CHECK (A.Block (c1).V[k] == dc->pParams[k].Def);

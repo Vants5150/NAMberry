@@ -3,7 +3,7 @@
 # (the Circle headers are found with ../../../../include). Compiles every test with g++ and prints one result line per test.
 cd "$(dirname "$0")/.." || exit 1
 INC="-Itests/host_shim -I../../../../include -Isrc -Isrc/adel -I."
-SRC="src/board.cpp src/graph.cpp src/fx.cpp src/fx_comp.cpp src/fx_delay.cpp src/fx_verb.cpp src/fx_phase.cpp src/fx_sweep.cpp src/fx_spring.cpp src/fx_chorus.cpp src/fx_cab.cpp src/fx_equal.cpp src/fx_delaym.cpp src/fx_verbm.cpp src/fx_shifter.cpp src/fx_extra.cpp src/fx_extra2.cpp src/fx_tube.cpp src/fx_rat.cpp src/fx_la2a.cpp src/fx_sag.cpp src/fx_dimd.cpp src/fx_muff.cpp src/fx_fuzzface.cpp src/fx_rangemaster.cpp src/fx_ds1.cpp src/fx_guvnor.cpp src/fx_klon.cpp src/fx_bender.cpp src/fx_wah.cpp src/fx_tonestack.cpp src/fx_dynacomp.cpp src/fx_phase90.cpp src/fx_ce2.cpp src/fx_factory.cpp src/fx_ce1.cpp src/fx_ad9.cpp src/fx_mflanger.cpp src/midi.cpp src/fx_univibe.cpp src/fx_ocd.cpp src/fx_octaver.cpp src/fx_flanger117.cpp"
+SRC="src/board.cpp src/graph.cpp src/fx.cpp src/fx_comp.cpp src/fx_delay.cpp src/fx_verb.cpp src/fx_phase.cpp src/fx_sweep.cpp src/fx_spring.cpp src/fx_chorus.cpp src/fx_cab.cpp src/fx_equal.cpp src/fx_delaym.cpp src/fx_verbm.cpp src/fx_shifter.cpp src/fx_extra.cpp src/fx_extra2.cpp src/fx_tube.cpp src/fx_rat.cpp src/fx_la2a.cpp src/fx_sag.cpp src/fx_noise.cpp src/fx_dimd.cpp src/fx_muff.cpp src/fx_fuzzface.cpp src/fx_rangemaster.cpp src/fx_ds1.cpp src/fx_guvnor.cpp src/fx_klon.cpp src/fx_bender.cpp src/fx_wah.cpp src/fx_tonestack.cpp src/fx_dynacomp.cpp src/fx_phase90.cpp src/fx_ce2.cpp src/fx_factory.cpp src/fx_ce1.cpp src/fx_ad9.cpp src/fx_mflanger.cpp src/midi.cpp src/fx_univibe.cpp src/fx_ocd.cpp src/fx_octaver.cpp src/fx_flanger117.cpp"
 echo "== test_board"; g++ -std=c++17 -O1 $INC tests/test_board.cpp $SRC -o /tmp/test_board 2>&1 | grep -E 'error' | head -5; /tmp/test_board | tail -2
 echo "== test_fx (effects, presets, moves, ADEL)"; g++ -std=c++17 -O1 $INC tests/test_fx.cpp $SRC -o /tmp/test_fx 2>&1 | grep -E 'error' | head -5; /tmp/test_fx | grep -E 'ADEL|RESULT|FAILED|error'
 echo "== test_fxmath"; g++ -std=c++17 -O2 -iquote src/fxshim tests/test_fxmath.cpp src/fxmath.cpp -o /tmp/test_fxmath 2>&1 | grep error; /tmp/test_fxmath | tail -2
@@ -25,6 +25,18 @@ echo "== test_rat (RAT: anchors from the real captures, controls, variants, stab
 echo "== test_la2a (Optical LA Real: threshold, order of the controls, attack/release, link, stability)"; g++ -std=c++17 -O1 $INC tests/test_la2a.cpp $SRC -o /tmp/test_la2a 2>&1 | grep -E "error" | head -5; /tmp/test_la2a | grep -E "FAILED|RESULT"
 
 echo "== test_sag (ADELSag: transparency, depth, presets, attack/recovery, class A, ripple, stereo, block size, stability)"; g++ -std=c++17 -O1 $INC tests/test_sag.cpp $SRC -o /tmp/test_sag 2>&1 | grep -E "error" | head -5; /tmp/test_sag | grep -E "FAILED|RESULT"
+
+echo "== test_noise (ADELNoise: off is transparent, hiss level and spectrum, hum harmonics, additive, stereo, block size, stability)"; g++ -std=c++17 -O1 $INC tests/test_noise.cpp $SRC -o /tmp/test_noise 2>&1 | grep -E "error" | head -5; /tmp/test_noise | grep -E "FAILED|RESULT|all ok|TESTS"
+
+echo "== test_bypass (bypass behaviours: Thru, Mute FX In, Mute FX Out, Mute In, Mute Out)"; g++ -std=c++17 -O1 $INC tests/test_bypass.cpp $SRC -o /tmp/test_bypass 2>&1 | grep -E "error" | head -5; /tmp/test_bypass | grep -E "FAILED|^ok|: OK" | tail -4
+
+echo "== test_reverb_wetonly (Wet Only with Mix on the reverbs)"; g++ -std=c++17 -O1 $INC tests/test_reverb_wetonly.cpp $SRC -o /tmp/test_reverb_wetonly 2>&1 | grep -E "error" | head -5; /tmp/test_reverb_wetonly | grep -E "FAILED|^ok|: OK" | tail -4
+
+echo "== test_delay_wetonly (Wet Only with Mix on the delays)"; g++ -std=c++17 -O1 $INC tests/test_delay_wetonly.cpp $SRC -o /tmp/test_delay_wetonly 2>&1 | grep -E "error" | head -5; /tmp/test_delay_wetonly | grep -E "FAILED|^ok|: OK" | tail -4
+
+echo "== test_chorus_wetonly (Wet Only with Mix on the chorus)"; g++ -std=c++17 -O1 $INC tests/test_chorus_wetonly.cpp $SRC -o /tmp/test_chorus_wetonly 2>&1 | grep -E "error" | head -5; /tmp/test_chorus_wetonly | grep -E "FAILED|^ok|: OK" | tail -4
+
+echo "== test_pitch_shimmer (transposed repeats and shimmer)"; g++ -std=c++17 -O1 $INC tests/test_pitch_shimmer.cpp $SRC -o /tmp/test_pitch_shimmer 2>&1 | grep -E "error" | head -5; /tmp/test_pitch_shimmer | grep -E "FAILED|RESULT|all ok|TESTS"
 
 echo "== test_dimd (Dimension D Real: delays per mode, antiphase, crossing, controls, stability)"; g++ -std=c++17 -O1 $INC tests/test_dimd.cpp $SRC -o /tmp/test_dimd 2>&1 | grep -E "error" | head -5; /tmp/test_dimd | grep -E "FAILED|all ok|TESTS"
 
