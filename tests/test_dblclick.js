@@ -34,6 +34,13 @@ a = dblAction({ id: 3, fx: "adelverb" }, { v: [], on: 0 });
 check(a.k == "on" && a.v == 1, "other blocks: off -> on");
 a = dblAction({ id: 4, t: "nam" }, { v: [], on: 1 });
 check(a.k == "on" && a.v == 0, "NAM block: on -> off");
+// the Selector tile never looks switched off; other blocks do when they are off
+const isOff = new Function(fnSrc("isOff") + ";return isOff;")();
+check(isOff({ fx: "selector", on: 0 }) === false && isOff({ fx: "selector", on: 1 }) === false, "a Selector tile is never shown as off");
+check(isOff({ fx: "adelverb", on: 0 }) === true && isOff({ fx: "adelverb", on: 1 }) === false, "other blocks: off is shown as off");
+// the editor of a Selector has no on/off switch
+const ed = src.slice(src.indexOf("function editor(info)"), src.indexOf("function editor(info)") + 3000);
+check(/if\(n\.fx!="selector"\)\{const sw=switchEl/.test(ed), "the editor creates the on/off switch for every block but the Selector");
 // add block menu: NAM, Volume, Routing, Pan, Selector first; the Selector is not repeated in the effects list
 const FXD = [{ fx: "adelverb", title: "ADELVerb (Reverb)" }, { fx: "selector", title: "Selector" }, { fx: "adeldelay", title: "ADELDelay" }, { fx: "phaser", title: "Phaser (old)", hid: 1 }, { fx: "tsdrive", title: "ToTest - TS Drive" }];
 const addOpts = new Function("FXD", fnSrc("fxSortKey") + ";" + lineSrc("const addOpts=") + ";return addOpts;")(FXD);

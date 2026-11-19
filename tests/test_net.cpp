@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstring>
 #include "board.h"
+#include "fx_defs.h"
 #include "graph.h"
 #include "params.h"
 
@@ -301,7 +302,7 @@ int main ()
 	CBoard::SetCpuMhz (1500);
 	CHECK (CBoard::NodeCost10 (NodeNam) == 215);
 
-	// ---- Selector (A/B/C): the outgoing links are the branches (from top to bottom); only the chosen branch passes; when off all pass
+	// ---- Selector (A/B/C): the outgoing links are the branches (from top to bottom); only the chosen branch passes; it has no off state
 	{
 		static CBoard S;
 		S.SetMode (2);
@@ -324,10 +325,22 @@ int main ()
 		}
 		OK (S.SetValue (sl, "sel", 7.0f));					// the parameter is limited to C
 		CHECK (S.Block ((unsigned) sl).V[0] == 2.0f);
-		OK (S.SetValue (sl, "on", 0.0f));					// off: all branches pass
+		OK (S.SetValue (sl, "sel", 0.0f));
+		OK (S.SetValue (sl, "on", 0.0f));					// no off state: the request is accepted and ignored, only branch A passes
+		CHECK (S.Block ((unsigned) sl).On);
 		Run (S, 0.5f, 0.0f, &oL, &oR);
-		NEAR (oL, want[0] + want[1] + want[2]);
-		OK (S.SetValue (sl, "on", 1.0f));
+		NEAR (oL, want[0]);
+		{
+			// a preset saved with the Selector off (older firmware) loads with it on; a block changed into a Selector is on
+			static char Tx[16384];
+			S.Block ((unsigned) sl).On = FALSE;
+			CHECK (S.Serialize (Tx, sizeof Tx) > 0);
+			static CBoard S2;
+			S2.SetMode (2);
+			CHECK (S2.Parse (Tx));
+			CHECK (S2.Block ((unsigned) sl).Type == FxSelector && S2.Block ((unsigned) sl).On);
+			S.Block ((unsigned) sl).On = TRUE;
+		}
 		// input trim of the guitar profile: -6.02 dB halves the output, 0 dB restores it
 			OK (S.SetValue (sl, "sel", 0.0f)); CBoard::SetInTrim (-6.0206f); Run (S, 0.5f, 0.0f, &oL, &oR); NEAR (oL, want[0] * 0.5f); CBoard::SetInTrim (0.0f); Run (S, 0.5f, 0.0f, &oL, &oR); NEAR (oL, want[0]);
 			// Outputs = AB: choice C falls back to B

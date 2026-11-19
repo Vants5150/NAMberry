@@ -798,7 +798,7 @@ Routing helper.
 
 | Control | Range | What it does |
 |---|---|---|
-| Branch | choice | Active branch = the block's output A, B or C (A at the top on the right side). The others stay muted. Double click on the block in the grid = next branch. |
+| Branch | choice | Active branch = the block's output A, B or C (A at the top on the right side). The others stay muted. Double click on the block in the grid = next branch. The Selector has no on/off switch. |
 | Outputs | choice | How many outputs the selector has: AB = two outputs, ABC = three outputs. |
 
 ## 4. NAM block

@@ -493,7 +493,7 @@ function tileHtml(n,mono){
   return inner+'<span class="lb">'+esc(lbl(n))+'</span><span class="tg'+(mono?"":" st")+'">'+(mono?"M":"ST")+"</span>";
 }
 let drag=null,dndSkip=false;
-function isOff(n){return !n.on}
+function isOff(n){return n.fx!="selector"&&!n.on}
 /* tile color by effect family*/
 /* same families as the Live Display: reverbs green, delays blue, modulations yellow, drives orange, other effects (utility, dynamics, tone) white*/
 const DRIVES=["tsdrive","tubescreamer","ratts","muff","fuzzface","centaur","bluesdrv","ds1","ocd","guvnor","rangemaster","fz1","bender","fuzzfactory","booster"];
@@ -573,7 +573,7 @@ const ln=(mono,x)=>el("span","ln"+(mono?"":" st")+(x?" "+x:""));
 function editor(info){
   const n=info.n,c=el("div","card ed");
   const h=el("h3","");
-  const sw=switchEl(v=>g({op:"set",id:n.id,k:"on",v}));h.appendChild(sw);addBind(n.id,nn=>sw.sync(nn.on));
+  if(n.fx!="selector"){const sw=switchEl(v=>g({op:"set",id:n.id,k:"on",v}));h.appendChild(sw);addBind(n.id,nn=>sw.sync(nn.on))}   /* the Selector has no on/off*/
   {
     /* the block type is a menu: choosing another one replaces the block (in the same position)*/
     const cur=n.t=="fx"?n.fx:(n.t=="vol"&&n.rt?"rout":n.t),ts=el("select","tsel");ts.title="Block type: choosing another one replaces this block";
@@ -1078,7 +1078,7 @@ function smNotes(n,d){
 }/* effect panel: one box per group as in PiPedal's plugins; knobs (also logarithmic), menus, switches and measured values*/
 let FXO=[];
 function fxEditor(c,n){
-  if(n.fx=="selector")c.appendChild(el("div","info","The Selector sends the signal to ONE output at a time: it has outputs A, B (and C if Outputs = ABC) on the right side of the block, drag from the one you want to the block that must receive the signal. Choose the branch with Branch, from MIDI (Branch parameter) or by double clicking the block in the grid, which moves to the next branch. You can link several blocks from the same output. An output with no links is silence. When it is off, all the outputs pass."));
+  if(n.fx=="selector")c.appendChild(el("div","info","The Selector sends the signal to ONE output at a time: it has outputs A, B (and C if Outputs = ABC) on the right side of the block, drag from the one you want to the block that must receive the signal. Choose the branch with Branch, from MIDI (Branch parameter) or by double clicking the block in the grid, which moves to the next branch. You can link several blocks from the same output. An output with no links is silence. The Selector has no on/off switch: it always routes to the chosen output."));
   FXO=[];
   const d=fxd(n.fx);
   if(!d){c.appendChild(el("div","info bad","Unknown effect: "+esc(n.fx)));return}

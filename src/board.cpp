@@ -518,7 +518,7 @@ const char *CBoard::SetValue (int nId, const char *pKey, float fValue)
 		{
 			return BD_LOAD_MSG;
 		}
-		Bl.On = fValue > 0.5f;
+		Bl.On = fValue > 0.5f || Bl.Type == FxSelector;		// the Selector has no on/off: it always routes to the chosen output
 	}
 	else if (strcmp (pKey, "byp") == 0)
 	{
@@ -1008,6 +1008,10 @@ const char *CBoard::NetRetype (int nId, const char *pType, const char *pDefaultF
 	Bl.HasModelIn = FALSE;
 	Bl.ModelInDbu = 0.0f;
 	Bl.Type = nType;
+	if (nType == FxSelector)
+	{
+		Bl.On = TRUE;		// the Selector has no on/off
+	}
 	if (bRout)
 	{
 		Bl.V[1] = 1.0f;
@@ -1458,7 +1462,7 @@ void CBoard::NetBuild (TPlan *pPlan) const
 		PutLink (Tmp, &nTmp, K.From, K.To, K.PF, K.PT, DbToLin (K.Db));
 	}
 	// Selector (A/B/C): the branches are its output ports (A = port 1, B = port 2, C = port 0); only the chosen port passes, the others are zero (a port with no links
-	// = silence). The signal is always the block's stereo one: the port only serves to choose the branch, so the compiled link starts from port 0. On = selects; off = all the branches pass
+	// = silence). The signal is always the block's stereo one: the port only serves to choose the branch, so the compiled link starts from port 0. The Selector is always on (no off state)
 	for (unsigned s = 0; s < PL_MAX_NODES; s++)
 	{
 		if (!m_Block[s].Used || m_Block[s].Type != FxSelector)
@@ -2176,7 +2180,7 @@ boolean CBoard::Parse (const char *pText)
 			TBdBlock &Bl = Tmp.m_Block[i];
 			Bl.Used = TRUE;
 			Bl.Type = (u8) v[0];
-			Bl.On = v[1] != 0;
+			Bl.On = v[1] != 0 || Bl.Type == FxSelector;		// the Selector cannot be off (older presets may have saved it off)
 			Bl.Byp = (u8) ((nInts == 9 && v[7] > 0 && v[7] < BYP_COUNT) ? v[7] : BYP_THRU);		// format 'd': the old "lane" field holds the bypass behaviour
 			Bl.A = v[3];
 			Bl.B = v[4];
