@@ -91,7 +91,7 @@ int main ()
 		CHECKM (d != 0, "type %u without definition", t);
 		if (!d) continue;
 		nNew++;
-		CHECKM (strncmp (d->Title, "ToTest", 6) == 0 || strncmp (d->Title, "ADEL", 4) == 0, "title with neither ToTest nor ADEL: %s", d->Title);
+		CHECKM (strncmp (d->Title, "ToTest", 6) == 0 || strncmp (d->Title, "ADEL", 4) == 0 || strcmp (d->Title, "Selector") == 0, "title with neither ToTest nor ADEL nor Selector (a service block): %s", d->Title);
 		CHECK (d->nParams > 0 && d->nParams <= FX_MAX_P);
 		for (unsigned i = 0; i < d->nParams; i++)
 		{
@@ -569,7 +569,7 @@ int main ()
 		delete fx;
 	}
 
-	{	// Sync to MIDI tempo: at 120 bpm the 1/4 repeat comes back after 500 ms even with time = 100 ms; with Sync Off or with no known tempo the manual time applies
+	{	// Follow tap tempo: at 120 bpm the 1/4 repeat comes back after 500 ms even with time = 100 ms; with the switch off or with no known tempo the manual time applies
 		struct { unsigned type; float sel; unsigned want; } cs[3] = {{FxTapeEcho, 1.0f, 24000}, {FxAnalog, 1.0f, 24000}, {FxDuck, 1.0f, 24000}};
 		for (int variant = 0; variant < 3; variant++)
 		{
@@ -577,7 +577,7 @@ int main ()
 			{
 				g_fFxTempoBpm = variant == 2 ? 0.0f : 120.0f;
 				CFx *fx = FxCreate (cs[k].type, FS); Defaults (cs[k].type);
-				SetP (cs[k].type, "time", 100.0f); SetP (cs[k].type, "repeats", 0.0f); SetP (cs[k].type, "mix", 100.0f); SetP (cs[k].type, "sync", variant == 1 ? 0.0f : cs[k].sel);
+				SetP (cs[k].type, "time", 100.0f); SetP (cs[k].type, "repeats", 0.0f); SetP (cs[k].type, "mix", 100.0f); SetP (cs[k].type, "sync", cs[k].sel); SetP (cs[k].type, "follow", variant == 1 ? 0.0f : 1.0f);
 				if (cs[k].type == FxAnalog) SetP (cs[k].type, "mod", 0.0f);
 				if (cs[k].type == FxTapeEcho) { SetP (cs[k].type, "wow", 0.0f); SetP (cs[k].type, "sat", 0.0f); SetP (cs[k].type, "tone", 100.0f); }
 				std::vector<float> out (36000);
@@ -592,7 +592,7 @@ int main ()
 				unsigned peak = 0; float pv = 0;
 				for (unsigned i = 200; i < 36000; i++) if (fabsf (out[i]) > pv) { pv = fabsf (out[i]); peak = i; }
 				const unsigned want = variant == 0 ? cs[k].want : 4800;
-				CHECKM (peak + 200 > want && peak < want + 200 && pv > 0.03f, "%s sync variant %d: echo at %u samples (expected about %u), amplitude %g", FxDefByType (cs[k].type)->Name, variant, peak, want, pv);
+				CHECKM (peak + 200 > want && peak < want + 200 && pv > 0.03f, "%s follow variant %d: echo at %u samples (expected about %u), amplitude %g", FxDefByType (cs[k].type)->Name, variant, peak, want, pv);
 				delete fx;
 			}
 		}

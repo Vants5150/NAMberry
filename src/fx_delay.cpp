@@ -21,13 +21,30 @@ public:
 		{
 			m_fIn[j] = *pMono ? pL[j] : 0.5f * (pL[j] + pR[j]);
 		}
-		m_Eng.process (m_fIn, pL, pR, n, paramsFromControls (pP));
+		// Follow tap tempo: the base time is the quarter note of the master tempo (Rhythm applies to it, Glide smooths the change); the stored Time stays as set
+		const float fMs = FxFollowMs (pP[kFollow]);
+		if (fMs > 0.0f)
+		{
+			for (unsigned i = 0; i < kFollow; i++)
+			{
+				m_fV[i] = pP[i];
+			}
+			m_fV[C_TIME] = fMs < 20.0f ? 20.0f : (fMs > 2000.0f ? 2000.0f : fMs);
+			m_Eng.process (m_fIn, pL, pR, n, paramsFromControls (m_fV));
+		}
+		else
+		{
+			m_Eng.process (m_fIn, pL, pR, n, paramsFromControls (pP));
+		}
 		*pMono = 0;
 	}
 
 private:
+	static const unsigned kFollow = C_COUNT;		// the Follow tap tempo switch is the control after the last one of the engine
+	static_assert (sizeof g_adeldelay_Params / sizeof g_adeldelay_Params[0] == C_COUNT + 1, "the delay controls are the engine's plus Follow tap tempo");
 	adeldelay::Delay m_Eng;
 	float m_fIn[PL_MAX_BLOCK];
+	float m_fV[FX_MAX_P];
 };
 
 CFx *NewAdelDelay (float fRate)

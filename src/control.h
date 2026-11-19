@@ -113,7 +113,7 @@ struct TCtlContext
 	CFeatures *pFeat;			// service functions with a switch (ftools.h)
 	volatile boolean FeatDirty;		// parameters and switches to save on the SD (features.cfg)
 	volatile unsigned MidiCtl3Cc;		// source (CC 32..127, 0 = none) of controller 3: it is global, it applies to all the presets (midi.cfg); the links stay in the preset
-	volatile boolean MidiSyncAdel;		// the ADEL delays follow the MIDI tempo (their time becomes the current quarter note); saved in midi.cfg
+	volatile boolean MidiSyncAdel;		// no longer used (the delays have their own Follow tap tempo switch, saved in the preset); kept so that midi.cfg keeps its format
 	volatile boolean MidiCfgDirty;		// channel and echo to save on the SD (midi.cfg)
 	volatile unsigned MidiBpm10;		// tempo (MIDI clock or tap tempo) in tenths of a bpm, 0 = none
 	volatile boolean MidiClockOn;		// incoming MIDI clock

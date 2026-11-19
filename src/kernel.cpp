@@ -131,7 +131,6 @@ CKernel::CKernel (void)
 #endif
 	m_pDin (0),
 	m_pFeat (0),
-	m_nSyncedBpm10 (0),
 	m_nDinState (0),
 	m_nDinAt (0),
 	m_nDinTries (0),
@@ -3239,25 +3238,8 @@ void CKernel::MidiTick (void)
 	}
 	m_Ctl.MidiClockOn = m_MidiClock.Active (nUs);
 
-	// MIDI tempo for the delays: the ToTest ones with Sync read it from the global variable; the ADEL delays (which already have tempo and rhythm) receive it as base tempo if the option is on
+	// master tempo (MIDI tap tempo, MIDI clock or the Tap tempo button of the page): every delay with its Follow tap tempo switch on reads it from this variable
 	g_fFxTempoBpm = (float) m_Ctl.MidiBpm10 * 0.1f;
-	if (m_Ctl.MidiSyncAdel && m_Ctl.MidiBpm10 >= 300 && m_Ctl.MidiBpm10 != m_nSyncedBpm10)
-	{
-		m_nSyncedBpm10 = m_Ctl.MidiBpm10;
-		const float fMs = 600000.0f / (float) m_Ctl.MidiBpm10;		// 60000 / bpm, con bpm = Bpm10 / 10
-		for (unsigned id = 0; id < BD_MAX_BLOCKS; id++)
-		{
-			const TBdBlock &Bl = m_pBoard->Block (id);
-			if (Bl.Used && (Bl.Type == FxAdelDelay || Bl.Type == FxAdelDelayM))
-			{
-				m_pBoard->SetValue ((int) id, "time", fMs < 20.0f ? 20.0f : (fMs > 2000.0f ? 2000.0f : fMs));
-			}
-		}
-	}
-	else if (!m_Ctl.MidiSyncAdel)
-	{
-		m_nSyncedBpm10 = 0;		// turning the option on again realigns immediately
-	}
 
 	MidiPcApply ();
 

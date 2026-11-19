@@ -38,6 +38,8 @@ echo "== test_chorus_wetonly (Wet Only with Mix on the chorus)"; g++ -std=c++17 
 
 echo "== test_pitch_shimmer (transposed repeats and shimmer)"; g++ -std=c++17 -O1 $INC tests/test_pitch_shimmer.cpp $SRC -o /tmp/test_pitch_shimmer 2>&1 | grep -E "error" | head -5; /tmp/test_pitch_shimmer | grep -E "FAILED|RESULT|all ok|TESTS"
 
+echo "== test_delay_tap (Follow tap tempo in every delay: time, subdivision, no tempo, switch off)"; g++ -std=c++17 -O1 $INC tests/test_delay_tap.cpp $SRC -o /tmp/test_delay_tap 2>&1 | grep -E "error" | head -5; /tmp/test_delay_tap | grep -E "FAILED|RESULT"
+
 echo "== test_dimd (Dimension D Real: delays per mode, antiphase, crossing, controls, stability)"; g++ -std=c++17 -O1 $INC tests/test_dimd.cpp $SRC -o /tmp/test_dimd 2>&1 | grep -E "error" | head -5; /tmp/test_dimd | grep -E "FAILED|all ok|TESTS"
 
 echo "== test_tonestack"; g++ -std=c++17 -O1 $INC tests/test_tonestack.cpp $SRC -o /tmp/test_tonestack 2>&1 | grep -E "error" | head -5; /tmp/test_tonestack | grep -E "FAILED|RESULT|all ok|TESTS"

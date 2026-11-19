@@ -335,6 +335,7 @@ Netlist for the linear parts, numerical NE570/NE571 compander (datasheet equatio
 | Delay Level | 0 to 10 | Like the DELAY LEVEL knob (100KB): level of the delayed signal in the mixer. |
 | Version | choice | The schematic says the AD9 exists in two versions: the values of the pre-emphasis, of the filters, of the mixer and of the compander capacitors (the ones in brackets) change. |
 | Repeat trim (VR105) | 0.1 to 20 k | 20k trimmer VR105 in series with the feedback: in the manual it is adjusted so that the repeats last over 10 seconds at maximum Repeat. |
+| Follow tap tempo | 0 to 1 | On: Delay Time follows the master tap tempo (the quarter note, halved to fit about 24 to 300 ms); off: the knob. |
 
 ### Optical LA (LA-2A style)
 
@@ -509,6 +510,8 @@ Reverb. Mono-lane version has a single output and no Width control.
 
 Stereo delay (ping-pong, tap spread); the mono version uses one delay line.
 
+**Follow tap tempo.** Every delay block (ADELdelay and its mono version, Tape Echo, Analog Delay, Duck Delay, the AD9) has a Follow tap tempo switch, saved with the preset: on, the delay time follows the master tempo; off, it keeps its own time. The master tempo is set with the Tap tempo button at the top of the delay's page, with MIDI CC 23 (tap tempo) or by the MIDI clock. ADELdelay takes the quarter note as its base time (Rhythm applies to it, Glide smooths the change); Tape Echo, Analog Delay and Duck Delay use the note value chosen in Subdivision (Off counts as 1/4); the AD9 takes the quarter note halved as many times as needed to fit its range (about 24 to 300 ms). Without a known tempo the delay keeps its own time.
+
 
 | Control | Range | What it does |
 |---|---|---|
@@ -545,6 +548,7 @@ Stereo delay (ping-pong, tap spread); the mono version uses one delay line.
 | Hold | 0 to 1 | Freezes the repeats in an infinite loop. |
 | Pitch | -12 to 12 st | Transposition of the repeats in semitones: every repeat steps again (12 = each repeat an octave higher). It only acts with Pitch Mix above 0. The repeats stay on the tempo. |
 | Pitch Mix | 0 to 100 % | Amount of transposed signal in the repeats. 0 = off, the dry signal is never transposed (no added latency). |
+| Follow tap tempo | 0 to 1 | On: the base time follows the master tap tempo; off: it keeps Time. |
 
 ### ADELspring
 

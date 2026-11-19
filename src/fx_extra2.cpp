@@ -409,7 +409,7 @@ public:
 	unsigned Type (void) const { return FxAnalog; }
 	void Process (float *pL, float *pR, unsigned n, int *pMono, const float *pP)
 	{
-		const float tMs = FxSyncMs (Clampf (pP[0], 20.0f, 600.0f), pP[4], 20.0f, 600.0f), fb = Clampf (pP[1], 0.0f, 100.0f) * 0.0092f, mix = Clampf (pP[2], 0.0f, 100.0f) * 0.01f, mod = Clampf (pP[3], 0.0f, 100.0f) * 0.01f;
+		const float tMs = FxSyncMs (Clampf (pP[0], 20.0f, 600.0f), FxFollowSel (pP[5], pP[4]), 20.0f, 600.0f), fb = Clampf (pP[1], 0.0f, 100.0f) * 0.0092f, mix = Clampf (pP[2], 0.0f, 100.0f) * 0.01f, mod = Clampf (pP[3], 0.0f, 100.0f) * 0.01f;
 		const float aBbd = LpA (3200.0f, m_fRate) , aDc = LpA (30.0f, m_fRate);
 		const float tSamp = tMs * 0.001f * m_fRate;
 		const unsigned nCh = *pMono ? 1 : 2;
@@ -454,7 +454,7 @@ public:
 	unsigned Type (void) const { return FxDuck; }
 	void Process (float *pL, float *pR, unsigned n, int *pMono, const float *pP)
 	{
-		const float tMs = FxSyncMs (Clampf (pP[0], 20.0f, 1000.0f), pP[4], 20.0f, 1000.0f), fb = Clampf (pP[1], 0.0f, 90.0f) * 0.0095f, duck = Clampf (pP[2], 0.0f, 100.0f) * 0.01f, mix = Clampf (pP[3], 0.0f, 100.0f) * 0.01f;
+		const float tMs = FxSyncMs (Clampf (pP[0], 20.0f, 1000.0f), FxFollowSel (pP[5], pP[4]), 20.0f, 1000.0f), fb = Clampf (pP[1], 0.0f, 90.0f) * 0.0095f, duck = Clampf (pP[2], 0.0f, 100.0f) * 0.01f, mix = Clampf (pP[3], 0.0f, 100.0f) * 0.01f;
 		const float aLp = LpA (6000.0f, m_fRate), aDc = LpA (30.0f, m_fRate), aA = LpA (120.0f, m_fRate), aR = LpA (4.0f, m_fRate);
 		const float tSamp = tMs * 0.001f * m_fRate;
 		const unsigned nCh = *pMono ? 1 : 2;

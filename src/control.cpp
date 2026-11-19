@@ -687,6 +687,17 @@ THTTPStatus CControl::HandleBoard (const char *pFormData, u8 *pBuffer, unsigned 
 				return Reply (pBuffer, pLength, ppContentType, "{\"ok\":0,\"err\":\"MIDI queue full\"}");
 			}
 		}
+		else if (strcmp (Op, "tempo") == 0)
+		{
+			// master tempo set by the Tap tempo button of the page (the browser times the taps): v = tenths of a bpm, 30 to 300 bpm
+			int v = 0;
+			boolean f;
+			if (!FieldInt (pFormData, "v", &v, &f) || !f || v < 300 || v > 3000)
+			{
+				return Reply (pBuffer, pLength, ppContentType, "{\"ok\":0,\"err\":\"invalid tempo\"}");
+			}
+			m_pContext->MidiBpm10 = (unsigned) v;
+		}
 		else if (strcmp (Op, "midilearn") == 0)
 		{
 			// k = 1 controller (id = 0..2), k = 2 block (id = block id), id = -1 cancels
@@ -2396,6 +2407,8 @@ if (strcmp (pPath, "/fx") == 0)
 		B.I (St.nOutRmsRPpm);
 		B.S (",\"test\":");
 		B.I (St.nTestSrc);
+		B.S (",\"bpm\":");
+		B.F ((float) m_pContext->MidiBpm10 * 0.1f, 1);
 		B.S (",\"up\":");
 		B.I (St.nUptimeSec);
 		B.S (",\"safe\":");

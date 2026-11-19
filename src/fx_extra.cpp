@@ -292,7 +292,7 @@ public:
 	unsigned Type (void) const { return FxTapeEcho; }
 	void Process (float *pL, float *pR, unsigned n, int *pMono, const float *pP)
 	{
-		const float tMs = FxSyncMs (Clampf (pP[0], 20.0f, 1000.0f), pP[6], 20.0f, 1000.0f), fb = Clampf (pP[1], 0.0f, 100.0f) * 0.0095f;
+		const float tMs = FxSyncMs (Clampf (pP[0], 20.0f, 1000.0f), FxFollowSel (pP[7], pP[6]), 20.0f, 1000.0f), fb = Clampf (pP[1], 0.0f, 100.0f) * 0.0095f;
 		const float aTone = LpA (1500.0f + Clampf (pP[2], 0.0f, 100.0f) * 0.01f * 7500.0f, m_fRate);
 		const float wow = Clampf (pP[3], 0.0f, 100.0f) * 0.01f, sat = Clampf (pP[4], 0.0f, 100.0f) * 0.01f * 3.0f + 0.3f;
 		const float mix = Clampf (pP[5], 0.0f, 100.0f) * 0.01f;

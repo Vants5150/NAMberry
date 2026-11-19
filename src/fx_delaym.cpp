@@ -29,6 +29,12 @@ public:
 		{
 			v[g_adeldelaym_Map[j]] = pP[j];
 		}
+		// Follow tap tempo (control 33 of the full specification): the base time is the quarter note of the master tempo, the stored Time stays as set
+		const float fMs = FxFollowMs (v[C_COUNT]);
+		if (fMs > 0.0f)
+		{
+			v[C_TIME] = fMs < 20.0f ? 20.0f : (fMs > 2000.0f ? 2000.0f : fMs);
+		}
 		for (unsigned j = 0; j < n; j++)
 		{
 			m_fIn[j] = *pMono ? pL[j] : 0.5f * (pL[j] + pR[j]);

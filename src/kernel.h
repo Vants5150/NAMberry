@@ -291,7 +291,6 @@ private:
 	void SerialTick (unsigned nMs);
 	static void SerialRemovedHandler (CDevice *pDevice, void *pContext);
 #endif
-	unsigned		m_nSyncedBpm10;	// last tempo (tenths of bpm) applied to the ADEL delays
 	CFeatures		*m_pFeat;		// service functions with a switch (all off at startup)
 	void FeatInit (void);
 	void FeatCfgRead (void);

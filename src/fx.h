@@ -86,4 +86,17 @@ static inline float FxSyncMs (float fManualMs, float fSel, float fMin, float fMa
 	return ms < fMin ? fMin : (ms > fMax ? fMax : ms);
 }
 
+// Follow tap tempo (a switch in every delay, saved with the preset): the quarter note of the master tempo in ms, or 0 if the block does not follow
+// (switch off) or no tempo is known; the master tempo comes from the MIDI tap tempo (CC 23), the MIDI clock or the Tap tempo button of the page
+static inline float FxFollowMs (float fFollow)
+{
+	const float bpm = g_fFxTempoBpm;
+	return (fFollow > 0.5f && bpm >= 30.0f) ? 60000.0f / bpm : 0.0f;
+}
+// selection for FxSyncMs of the ToTest delays: with the switch on the chosen subdivision applies (Off counts as 1/4), with the switch off the manual time
+static inline float FxFollowSel (float fFollow, float fSel)
+{
+	return fFollow > 0.5f ? (fSel < 0.5f ? 1.0f : fSel) : 0.0f;
+}
+
 #endif

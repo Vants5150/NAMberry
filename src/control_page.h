@@ -445,6 +445,28 @@ function dblAction(n,cn){
   if(n.fx=="selector"){const no=cn.v[1]>0.5?3:2;return {op:"set",id:n.id,k:"sel",v:(Math.round(cn.v[0])+1)%no}}
   return {op:"set",id:n.id,k:"on",v:cn.on?0:1}
 }
+/* tap tempo of the page: taps = times (ms) of the current series; a pause over 2.5 s starts a new series; the tempo is the average of the last 5 taps, limited to 30-300 bpm (0 until there are two taps)*/
+function tapTempo(taps,now){
+  if(taps.length&&now-taps[taps.length-1]>2500)taps=[];
+  taps=taps.concat([now]).slice(-5);
+  if(taps.length<2)return {taps,bpm:0};
+  const bpm=60000/((taps[taps.length-1]-taps[0])/(taps.length-1));
+  return {taps,bpm:Math.max(30,Math.min(300,bpm))};
+}
+const TAPFX=["adeldelay","adeldelaym","tapeecho","analogdelay","duckdelay","ad9"];
+let tapSeries=[];
+function tapRow(){
+  const r=el("div","info taprow");r.style.display="flex";r.style.alignItems="center";r.style.gap="12px";r.style.flexWrap="wrap";
+  const b=btn("Tap tempo","Tap in time: sets the master tempo (the same as MIDI CC 23). The delays with Follow tap tempo on use it.",()=>{
+    const t=tapTempo(tapSeries,performance.now());tapSeries=t.taps;
+    if(t.bpm>0)g({op:"tempo",v:Math.round(t.bpm*10)});
+  });
+  r.appendChild(b);
+  const l=el("span","tapbpm","");l.style.fontWeight="600";l.style.minWidth="70px";l.textContent=STBPM>0?STBPM.toFixed(1)+" bpm":"no tempo";r.appendChild(l);
+  r.appendChild(el("span","","Master tempo: the delays with <b>Follow tap tempo</b> on use it (saved with the preset), the others keep their time."));
+  return r;
+}
+let STBPM=0;
 function fxSortKey(t){return String(t).replace(/^ToTest - /,"").replace(/^ADEL\s*/i,"")}
 const fxMixIdx=n=>{const d=fxd(n.fx);return d?d.p.findIndex(p=>p.k=="mix"):-1};
 /* ToTest effects (fx_extra.cpp): they keep a mono input mono, except these four, which make the output stereo*/
@@ -940,6 +962,7 @@ function meter(kind,idx){
 const SWL=[];
 function swLamp(txt){const w=el("span","swlamp"),l=el("span","lamp green");w.appendChild(l);w.appendChild(document.createTextNode(txt));SWL.push(l);return w}
 function mtApply(j){
+  if(typeof j.bpm=="number"){STBPM=j.bpm;document.querySelectorAll(".tapbpm").forEach(e=>{e.textContent=j.bpm>0?j.bpm.toFixed(1)+" bpm":"no tempo"})}
   SWL.forEach(l=>{if(l.isConnected)l.classList.toggle("on",!!j.sw)});
   document.querySelectorAll('.bk[data-fx="adelsendsweep"]').forEach(e=>e.classList.toggle("swplay",!!j.sw));
   const now=performance.now(),db=p=>p>0?20*Math.log10(p/1e6):-90,pc=x=>Math.max(0,Math.min(100,(x+60)/60*100));
@@ -1083,6 +1106,7 @@ function fxEditor(c,n){
   const d=fxd(n.fx);
   if(!d){c.appendChild(el("div","info bad","Unknown effect: "+esc(n.fx)));return}
   if(n.fx=="cabir")cabPanel(c,n);
+  if(TAPFX.includes(n.fx))c.appendChild(tapRow());
   if(n.fx=="adelphase")c.appendChild(swLamp("Probe playing"));
   const groups=d.g&&d.g.length?d.g:[d.title];
   if(n.fx=="shiftermanual")c.appendChild(smNotes(n,d));
@@ -2300,8 +2324,7 @@ function miFill(c){
   const ec=el("input");ec.type="checkbox";ec.checked=!!M.echo;ec.onchange=()=>miSend({op:"midiset",e:ec.checked?1:0});
   const el1=el("label","");el1.style.marginLeft="14px";el1.appendChild(ec);el1.appendChild(document.createTextNode(" Echo: reply with the same CC (controller LED)"));r1.appendChild(el1);
   r1.appendChild(btn("Tap tempo","Like CC 23: tap in time to set the tempo",()=>miSend({op:"midiinj",ty:2,ch:0,a:23,b:127})));
-  const sy=el("input");sy.type="checkbox";sy.checked=!!M.sync;sy.onchange=()=>miSend({op:"midiset",s:sy.checked?1:0});
-  const sl=el("label","");sl.style.marginLeft="14px";sl.title="The tempo of the MIDI clock or of the tap tempo becomes the base tempo of the ADEL delays (the subdivision stays the one chosen in the block). The ToTest delays have their own Sync parameter.";sl.appendChild(sy);sl.appendChild(document.createTextNode(" The ADEL delays follow the tempo"));r1.appendChild(sl);
+  const sl=el("span","");sl.style.marginLeft="14px";sl.textContent="Each delay has its own Follow tap tempo switch (saved in the preset).";r1.appendChild(sl);
   c.appendChild(r1);
   // fixed CCs
   c.appendChild(el("h4","","Fixed CCs (0-63 off, 64-127 on)"));

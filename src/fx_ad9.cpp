@@ -138,7 +138,7 @@ const unsigned kFifo = 2048;						// 4096 stages / 2
 class CAd9 : public CFx
 {
 public:
-	CAd9 (float fRate) : m_fRate (fRate), m_bInit (false), m_nVer (0), m_eC (0.0), m_eE (0.0), m_fFb (0.0), m_fPh (0.0), m_fOut (0.0), m_fLastIn (0.0), m_fPrev (0.0), m_nW (0), m_fR43 (-1.0f)
+	CAd9 (float fRate) : m_fRate (fRate), m_bInit (false), m_nVer (0), m_eC (0.0), m_eE (0.0), m_fFb (0.0), m_fPh (0.0), m_fOut (0.0), m_fLastIn (0.0), m_fPrev (0.0), m_dFollowDl (0.0), m_fFollowMs (0.0f), m_nW (0), m_fR43 (-1.0f)
 	{
 		for (unsigned i = 0; i < kFifo; i++) m_Fifo[i] = 0.0f;
 	}
@@ -163,6 +163,27 @@ public:
 			*pMono = 0;
 		}
 		double dl = pP[0] * 0.1, rp = pP[1] * 0.1, lv = pP[2] * 0.1;
+		// Follow tap tempo: the knob position that gives the quarter note of the master tempo, halved as many times as needed to fit the pedal's range
+		const float fFollowMs = FxFollowMs (pP[5]);
+		if (fFollowMs > 0.0f)
+		{
+			if (fFollowMs != m_fFollowMs)
+			{
+				m_fFollowMs = fFollowMs;
+				double ms = (double) fFollowMs;
+				while (ms > 300.0) ms *= 0.5;
+				while (ms < 24.1) ms *= 2.0;
+				// time law of the clock below: ms = 24.094 x exp (2.523 x knob); bisection (the knob is between 0 and 1)
+				double lo = 0.0, hi = 1.0;
+				for (int it = 0; it < 14; it++)
+				{
+					const double mid = 0.5 * (lo + hi);
+					if (24.094 * (double) Ck::Exp ((float) (mid * 2.5230)) < ms) lo = mid; else hi = mid;
+				}
+				m_dFollowDl = 0.5 * (lo + hi);
+			}
+			dl = m_dFollowDl;
+		}
 		dl = dl < 0 ? 0 : (dl > 1 ? 1 : dl); rp = rp < 0 ? 0 : (rp > 1 ? 1 : rp); lv = lv < 0 ? 0 : (lv > 1 ? 1 : lv);
 		m_A.SetR (m_hA[3], (1.0 - rp) * 100.0e3 + 1.0); m_A.SetR (m_hA[4], rp * 100.0e3 + 1.0);
 		m_D.SetR (m_hD[2], (1.0 - lv) * 100.0e3 + 1.0); m_D.SetR (m_hD[3], lv * 100.0e3 + 1.0);
@@ -223,7 +244,8 @@ private:
 	float m_fRate;
 	bool m_bInit;
 	int m_nVer;
-	double m_eC, m_eE, m_fFb, m_fPh, m_fOut, m_fLastIn, m_fPrev;
+	double m_eC, m_eE, m_fFb, m_fPh, m_fOut, m_fLastIn, m_fPrev, m_dFollowDl;
+	float m_fFollowMs;
 	unsigned m_nW;
 	float m_fR43;
 	float m_Fifo[kFifo];
