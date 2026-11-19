@@ -473,7 +473,7 @@ inline const TFxDef g_FxDefs[] =
 	XDEFN (FxAnalog, "analogdelay", "ADELAnalogDelayMemoryMan", g_XAnalog),
 	XDEFN (FxDuck, "duckdelay", "ADELDuckingDelay", g_XDuck),
 	XDEFN (FxSustain, "sustainer", "ADELSustainer", g_XSustain),
-	XDEFN (FxSelector, "selector", "ADELSelector", g_XSel),
+	XDEFN (FxSelector, "selector", "Selector", g_XSel),
 	{FxSecondHand, "secondhand", "ADELSecondHand", sizeof g_XSecondHand / sizeof g_XSecondHand[0], g_XSecondHand, 4, g_XShGroups, 0},
 	{FxShifterManual, "shiftermanual", "ADELshifter Manual", sizeof g_XShifterManual / sizeof g_XShifterManual[0], g_XShifterManual, 6, g_XSmGroups, 0},
 	XDEFN (FxTubeScreamer, "tubescreamer", "ADELScreamerTS", g_XTube),

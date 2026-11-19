@@ -438,8 +438,13 @@ let FXD=[];
 const fxd=k=>FXD.find(d=>d.fx==k);
 const fxShort=d=>String(d.title).split(" (")[0];
 const nmOf=n=>n.t=="fx"?(fxd(n.fx)?fxShort(fxd(n.fx)):n.fx):(n.t=="vol"&&n.rt?"Routing":TNAME[n.t]);
-const addOpts=depth=>[["nam","NAM"],["vol","Volume"],["rout","Routing (routing only)"],["pan","Pan (stereo)"]].concat(FXD.filter(d=>!d.hid).map(d=>[d.fx,d.title]).sort((a,b)=>(String(a[1]).indexOf("ToTest")==0)-(String(b[1]).indexOf("ToTest")==0)||fxSortKey(a[1]).localeCompare(fxSortKey(b[1]),"en",{sensitivity:"base"})));
+const addOpts=depth=>[["nam","NAM"],["vol","Volume"],["rout","Routing (routing only)"],["pan","Pan (stereo)"],["selector","Selector"]].concat(FXD.filter(d=>!d.hid&&d.fx!="selector").map(d=>[d.fx,d.title]).sort((a,b)=>(String(a[1]).indexOf("ToTest")==0)-(String(b[1]).indexOf("ToTest")==0)||fxSortKey(a[1]).localeCompare(fxSortKey(b[1]),"en",{sensitivity:"base"})));
 /* effects in alphabetical order in the choice menus, the ToTest ones at the end: the "ADEL" and "ToTest - " prefixes are ignored for the order (the text shown stays the same)*/
+/* what a double click on a block tile sends: a Selector goes to its next output (A->B->C->A, or A->B->A with two outputs), every other block switches on or off*/
+function dblAction(n,cn){
+  if(n.fx=="selector"){const no=cn.v[1]>0.5?3:2;return {op:"set",id:n.id,k:"sel",v:(Math.round(cn.v[0])+1)%no}}
+  return {op:"set",id:n.id,k:"on",v:cn.on?0:1}
+}
 function fxSortKey(t){return String(t).replace(/^ToTest - /,"").replace(/^ADEL\s*/i,"")}
 const fxMixIdx=n=>{const d=fxd(n.fx);return d?d.p.findIndex(p=>p.k=="mix"):-1};
 /* ToTest effects (fx_extra.cpp): they keep a mono input mono, except these four, which make the output stereo*/
@@ -1403,8 +1408,7 @@ function ntile(n,mono){
     const now=Date.now();
     if(lastTileClick.id==n.id&&now-lastTileClick.t<600){
       lastTileClick={id:-1,t:0};
-      if(n.fx=="selector"){const no=cn.v[1]>0.5?3:2;g({op:"set",id:n.id,k:"sel",v:(Math.round(cn.v[0])+1)%no})}   /* the Selector moves to the next branch (A->B->C->A, or A->B->A)*/
-      else g({op:"set",id:n.id,k:"on",v:cn.on?0:1});
+      g(dblAction(n,cn));
       return}
     lastTileClick={id:n.id,t:now};
     sel=sel==n.id?null:n.id;build();upd();
